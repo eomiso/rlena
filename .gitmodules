@@ -1,0 +1,6 @@
+[submodule "envs/playground"]
+	path = envs/playground
+	url = https://github.com/MultiAgentLearning/playground.git
+[submodule "envs/marlenv"]
+	path = envs/marlenv
+	url = https://github.com/kc-ml2/marlenv.git
