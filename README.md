@@ -1,3 +1,7 @@
+# Dev Branch
+When merging to master, bypass dev branch first!
+
+
 # RLENA: Battle Arena for RL agents
 ## RL2021 project
 
