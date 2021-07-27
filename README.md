@@ -23,6 +23,15 @@ cd ../envs/playground
 pip install -U .
 ```
 
+rl2 library included as a submodule for convinence.  
+Currently it is mirroring the folked version in diya gitlab.  
+This also may removed later.  
+if you need to install rl2 for running the code,
+```bash
+cd misc/rl2
+pip install -e .
+```
+  
 marlenv: Snake   
 playground: Pommerman
 
