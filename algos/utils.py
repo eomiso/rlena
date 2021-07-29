@@ -19,7 +19,10 @@ class CustomEnvWrapper(Pomme):
                 config["agent"](agent_id, config["game_type"]))
         self.set_agents(list(agents.values()))
         self.set_init_game_state(None)
-        self._agent_view_size
+        view_range = 2 * self._agent_view_size + 1
+        locational_shape = (5, view_range, view_range)
+        additional_shape = (8,)
+        self.observation_shape = (locational_shape, additional_shape)
 
     def reset(self):
         obs = super().reset()

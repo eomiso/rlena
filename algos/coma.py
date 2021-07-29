@@ -1,13 +1,16 @@
+from copy import deepcopy
 from easydict import EasyDict
-from utils import CustomEnvWrapper, get_global_obs
+from utils import CustomEnvWrapper
 from pommerman.configs import one_vs_one_env, team_competition_env
-import pommerman
-from typing import Callable, List
+from functools import reduce
+from typing import Callable, Iterable, List, Union
 import os
-import numpy as np
+import operator
 import torch
 import torch.nn.functional as F
+import numpy as np
 import gym
+import pommerman
 import marlenv
 
 from rl2.models.torch.base import BranchModel, InjectiveBranchModel, TorchModel
@@ -49,36 +52,55 @@ def loss_func(data, model, **kwargs):
 
 class COMAPGModel(TorchModel):
     def __init__(self,
-                 observation_shape,
+                 observation_shape: Union[Iterable[int], Iterable[Iterable]],
                  action_shape,
                  joint_action_shape,
+                 n_agents: int = 2,
                  encoder: torch.nn.Module = None,
                  encoded_dim: int = 64,
                  optimizer='torch.optim.Adam',
                  lr=1e-4,
                  discrete: bool = True,
                  deterministic: bool = False,
-                 flatten: bool = False,
-                 reorder: bool = False,
-                 recurrent: bool = False,
+                 flatten: bool = False,  # True if you don't want CNN enc
+                 reorder: bool = False,  # flag for (C, H, W)
+                 recurrent: bool = True,
                  **kwargs):
+        # Presetting for handling additional observation.
+        self.additional = False
+        if hasattr(observation_shape[0], '__iter__'):
+            # Unpack the tuple of shapes
+            observation_shape, add_shape = observation_shape
+            # First shape of the observation assumed to be a locational info
+            # and Thus will be treated as a main obs and Assummed to be (C,H,W)
+            self.additional = True
+
         super().__init__(observation_shape, action_shape, **kwargs)
         if hasattr(encoder, 'output_shape'):
             encoded_dim = encoder.output_shape
+
         self.encoded_dim = encoded_dim
         self.recurrent = recurrent
+        self.n_agents = n_agents
+        # TODO: Currently recurrent unit uses LSTM -> change to GRU later
+        # Actor uses inputs of locational obs, additional obs, and old action.
+        # Policy network uses locational obs as main obs, and other inputs are
+        # injected together after passing the CNN enc.
         self.policy = InjectiveBranchModel(observation_shape, action_shape,
-                                           (8,),
+                                           injection_shape=(9,),
                                            encoded_dim=encoded_dim,
                                            optimizer=optimizer,
                                            lr=lr,
                                            discrete=discrete,
                                            deterministic=deterministic,
                                            flatten=flatten,
-                                           reorder=reorder,
-                                           recurrent=recurrent,  # True
+                                           reorder=False,
+                                           recurrent=True,  # True
                                            **kwargs)
+        # Decentralized Actors
+        self.policies = [deepcopy(self.policy) for i in range(self.n_agents)]
 
+        # Centralized Critic
         self.value = InjectiveBranchModel(observation_shape,
                                           (action_shape[0],),
                                           (len(action_shape),),  # n_acs?
@@ -93,11 +115,13 @@ class COMAPGModel(TorchModel):
                                           recurrent=False,
                                           **kwargs)
 
-        self.init_params(self.policy)
+        # Initialize params
+        list(map(self.init_params, self.policies))
         self.init_params(self.value)
 
-    def forward(self, obs: np.ndarray, **kwargs):
+    def forward(self, obs: torch.tensor, *args, **kwargs):
         obs = obs.to(self.device)
+        args = [a.to(self.device) for a in args]
         action_dist = self.policy(obs, **kwargs)
         value_dist = self.value(obs, **kwargs)
         if self.recurrent:
@@ -106,8 +130,12 @@ class COMAPGModel(TorchModel):
 
         return action_dist, value_dist
 
-    def act(self, obs: np.ndarray, old_ac: int) -> np.ndarray:
-        action_dist, hidden = self._infer_from_numpy(self.policy, obs, old_ac)
+    def act(self, obs: np.ndarray, agent: int, *args) -> np.ndarray:
+        # *args contains the injections i.e. (additional obs, old_action)
+        inj = reduce(operator.add, args)
+        # FIXME: multiple injections might be handled in _infer_from_numpy
+        policy = self.policies[agent]
+        action_dist, hidden = self._infer_from_numpy(policy, obs, inj)
         action = action_dist.sample().squeeze()
         action = action.detach().cpu().numpy()
 
@@ -286,8 +314,12 @@ class COMAgent(MAgent):
 
     def act(self, joint_obs, old_joint_action) -> np.ndarray:
         joint_action = np.empty(self.n_agents)
+
         for i, (obs, old_action) in enumerate(zip(joint_obs, old_joint_action)):
-            joint_action[i] = self.model.act(obs, old_action)
+            # FIXME: Handle cases for using a single observation
+            loc_obs = obs.get('locational')
+            add_obs = obs.get('additional')
+            joint_action[i] = self.model.act(loc_obs, i, add_obs, old_action)
 
         return joint_action
 
@@ -312,8 +344,9 @@ if __name__ == '__main__':
 
     # (5, 11, 11) = (len(loc) * vgrid * hgrid)
     # (5, 9, 9) = (len(loc) * (2*view_range+1) * (2*view_range+1))
-    observation_shape = g_loc[0].shape
-    additional_shape = g_add[0].shape
+
+    observation_shape = env.observation_shape
+    print(observation_shape)
     ac_shape = (env.action_space.n,)
     n_agents = len(env._agents)
     jac_shape = tuple([ac_shape for i in range(n_agents)])
