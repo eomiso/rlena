@@ -41,6 +41,7 @@ playground: Pommerman
 3. PPO
 4. QMIX
 5. COMA
+6. SAC
 
 ## demo
 Need more ideation
