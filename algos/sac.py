@@ -9,12 +9,14 @@ import torch.nn.functional as F
 
 import gym
 import pommerman
+from pommerman.agents import BaseAgent
 from pommerman.configs import one_vs_one_env, team_competition_env
 
 import torch as T
 import torch.nn as nn
 from rl2.models.torch.base import InjectiveBranchModel, TorchModel, BranchModel
 from rl2.agents.base import MAgent, Agent
+from rl2.buffers.base import ReplayBuffer
 from rl2.buffers.prioritized import PrioritizedReplayBuffer
 
 
@@ -106,12 +108,13 @@ class SACModel(TorchModel):
             flatten: bool = False,  # True if you don't need CNN in the encoder
             reorder: bool = False,  # Flag for (C, H, W)
             additional: bool = False,
+            deterministic: bool = False,
             device: str = None,
             **kwargs):
 
         self.device = device  # TODO
 
-        super().__init__(obs_shape, action_shape, **kwargs)
+        super().__init__(obs_shape, (action_shape, ), **kwargs)
         if hasattr(encoder, 'output_shape'):
             encoded_dim = encoder.output_shape
         self.encoer = encoder
@@ -135,10 +138,10 @@ class SACModel(TorchModel):
         if self.use_automatic_entropy_tuning:
             # set the max possible entropy as the target entropy
             if (isinstance(self.action_shape, Iterable)):
-                self.target_entropy = -T.log(1 / self.action_shape[0]) * .98
+                self.target_entropy = -np.log(1 / self.action_shape[0]) * .98
             else:
-                self.target_entropy = -T.log(1 / self.action_shape) * .98
-            self.target_entropy.to(self.device)
+                self.target_entropy = -np.log(1 / self.action_shape) * .98
+            self.target_entropy = T.tensor(self.target_entropy).to(self.device)
             self.log_alpha = T.zeros(1, requires_grad=True, device=self.device)
             self.alpha = self.log_alpha.exp()
             self.alpha_optim = T.optim.Adam([self.log_alpha],
@@ -146,8 +149,7 @@ class SACModel(TorchModel):
                                             eps=self.eps)
 
         # stochastic policy network
-        self.pi = InjectiveBranchModel(observation_shape,
-                                       action_shape,
+        self.pi = InjectiveBranchModel(obs_shape, (action_shape, ),
                                        injection_shape=(9, ),
                                        encoder=encoder,
                                        optimizer=optim_ac,
@@ -159,9 +161,8 @@ class SACModel(TorchModel):
                                        **kwargs)
 
         # q network
-        self.q1 = InjectiveBranchModel(observation_shape,
-                                       actions_shape,
-                                       injection_shape=(len(action_shape, )),
+        self.q1 = InjectiveBranchModel(obs_shape, (action_shape, ),
+                                       injection_shape=(action_shape, ),
                                        encoder=encoder,
                                        encoded_dim=encoded_dim,
                                        optimizer=optim_cr,
@@ -171,9 +172,8 @@ class SACModel(TorchModel):
                                        flatten=flatten,
                                        reorder=reorder)
 
-        self.q2 = InjectiveBranchModel(observation_shape,
-                                       actions_shape,
-                                       injection_shape=(len(action_shape, )),
+        self.q2 = InjectiveBranchModel(obs_shape, (action_shape, ),
+                                       injection_shape=(action_shape, ),
                                        encoder=encoder,
                                        encoded_dim=encoded_dim,
                                        optimizer=optim_cr,
@@ -189,9 +189,9 @@ class SACModel(TorchModel):
             'q2': self.q2,
         })
 
-        self.init_param(self.pi)
-        self.init_param(self.q1)
-        self.init_param(self.q2)
+        self.init_params(self.pi)
+        self.init_params(self.q1)
+        self.init_params(self.q2)
 
     @TorchModel.sharedbranch
     def forward(self, obs, **kwargs):
@@ -230,31 +230,36 @@ class SACModel(TorchModel):
         print('model loaded from {}'.format(save_dir))
 
 
-class SACAGent_DISC(Agent):
-    def __init__(
-            self,
-            model=SACModel,
-            buffer_cls=PrioritizedReplayBuffer,
-            buffer_size: int = int(1e6),
-            buffer_kwargs: dict = None,  # TODO
-            batch_size: int = None,  # TODO
-            train_interval: int = None,  # TODO
-            num_epochs: int = 1,  # TODO
-            **kwargs):
+class SACAGent_DISC(Agent, BaseAgent):
+    def __init__(self,
+                 model: TorchModel,
+                 buffer_cls: ReplayBuffer = PrioritizedReplayBuffer,
+                 buffer_size: int = int(1e6),
+                 buffer_kwargs: dict = None,
+                 batch_size: int = None,
+                 num_epochs: int = None,
+                 update_interval: int = None,
+                 train_interval: int = None,
+                 **kwargs):
 
-        if kwargs.hasattr('config'):
-            self.config = EasyDict(kwargs.get('config'))
+        # for pommerman need to initialiize the base agent
+        if 'character' in kwargs:
+            self._character = kwargs.get('character')
 
-        self.init_collect = self.config.init_collect
-        self.train_interval = self.config.train_interval
-        self.batch_size = self.config.batch_size
-        self.gamma = self.config.gamma
+        self.train_interval = train_interval
+        self.update_interval = update_interval
+        self.batch_size = batch_size
 
         if buffer_kwargs is None:
             buffer_kwargs = {
-                'size': self.config.buffer,
-                'state_shape': model.observation_shape,
-                'action_shape': model.action_shape
+                'capacity': buffer_size,
+                'elements': {
+                    'state': model.observation_shape,
+                    'action': model.action_shape,
+                    'reward': ((1, ), np.float32),
+                    'done': ((1, ), np.uint8),
+                    'state_p': model.observation_shape
+                }
             }
 
         super().__init__(model, train_interval, num_epochs, buffer_cls,
