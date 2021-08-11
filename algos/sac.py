@@ -11,15 +11,16 @@ import gym
 import pommerman
 from pommerman.configs import one_vs_one_env, team_competivition_env
 
-
-from rl2.models.torch.actor_critic import TorchModel
-from rl2.agents.base import MAgent, Agent   
+import torch as T
+import torch.nn as nn
+from rl2.models.torch.base import InjectiveBranchModel, TorchModel
+from rl2.agents.base import MAgent, Agent
 from rl2.buffers import ReplayBuffer
+
 
 def loss_func_ac(data, model, **kwargs):
     s, a, r, d, s_ = tuple(
-        map(lambda x: torch.from_numpy(x).float().to(model.device), data)
-        )
+        map(lambda x: torch.from_numpy(x).float().to(model.device), data))
     ac_dist = model.infer(s, hidden=kwargs.hidden, mask=d)
 
     if model.discrete:
@@ -29,9 +30,8 @@ def loss_func_ac(data, model, **kwargs):
 
 
 def loss_func_cr(data, model, **kwargs):
-    s, a , r, d, s_ = tuple(
-        map(lambda x: torch.from_numpy(x).float().to(model.device), data)
-        )
+    s, a, r, d, s_ = tuple(
+        map(lambda x: torch.from_numpy(x).float().to(model.device), data))
     with torch.no_grad():
         if model.discrete:
 
@@ -39,107 +39,142 @@ def loss_func_cr(data, model, **kwargs):
         else:
             pass
 
-def loss_func_alph(data, model, **kwargs):
-    pass
-
 
 class SACModel(TorchModel):
-    def __init__(self, 
-                 obs_shape, 
-                 action_shape,
-                 actor: torch.nn.Module = None, 
-                 critic: torch.nn.Module = None, 
-                 encoder: torch.nn.Module = None, 
-                 encoded_dim: int = 64,
-                 optim_ac: str = 'torch.nn.Module',
-                 optim_cr: str = 'torch.nn.Module',
-                 lr_ac: float = 1e-4,
-                 lr_cr: float = 1e-4,
-                 grad_clip: float = 1e-2,
-                 polyak: float = 0.995,
-                 discrete: bool = False,
-                 flatten: bool = False,
-                 reorder: bool = False,
-                 recurrent: bool = False,
-                 **kwargs):
+    def __init__(
+            self,
+            obs_shape,
+            action_shape,
+            actor: torch.nn.Module = None,
+            critic: torch.nn.Module = None,
+            encoder: torch.nn.Module = None,
+            encoded_dim: int = 64,
+            optim_ac: str = 'torch.optim.Adam',
+            optim_cr: str = 'torch.optim.Adam',
+            lr_ac: float = 1e-4,
+            lr_cr: float = 1e-4,
+            grad_clip: float = 1e-2,
+            polyak: float = 0.995,
+            discrete: bool = False,
+            flatten: bool = False,  # True if you don't need CNN in the encoder
+            reorder: bool = False,  # Flag for (C, H, W)
+            additional: bool = False,
+            **kwargs):
+
         super().__init__(obs_shape, action_shape, **kwargs)
         if hasattr(encoder, 'output_shape'):
             encoded_dim = encoder.output_shape
+        self.encoer = encoder
         self.encoded_dim = encoded_dim
-        self.recurrent = recurrent
         self.discrete = discrete
         self.flatten = flatten
         self.reorder = reorder
 
-        self.optim_ac = optim_ac
-        self.optim_cr = optim_cr
-        
         self.lr_ac = lr_ac
         self.lr_cr = lr_cr
-        
+
         self.grad_clip = grad_clip
         self.polyak = polyak
 
         self.is_save = kwargs.get('is_save', False)
 
-        # stochastic policy network
-        self.pi = 
+        self.eps = np.finfo(np.float32).eps.item()
 
-        # q network 
-        self.q1 = 
-        self.q2 = 
-        
+        # stochastic policy network
+        self.pi = InjectiveBranchModel(observation_shape,
+                                       action_shape,
+                                       injection_shape=(9, ),
+                                       encoder=encoder,
+                                       optimizer=optim_ac,
+                                       lr=lr_ac,
+                                       discrete=discrete,
+                                       deterministic=deterministic,
+                                       reorder=reorder,
+                                       flatten=flatten,
+                                       **kwargs)
+
+        # q network
+        self.q1 = InjectiveBranchModel(observation_shape,
+                                       actions_shape,
+                                       injection_shape=(len(action_shape, )),
+                                       encoder=encoder,
+                                       encoded_dim=encoded_dim,
+                                       optimizer=optimizer,
+                                       lr=lr_cr,
+                                       discrete=discrete,
+                                       deterministic=deterministic,
+                                       flatten=flatten,
+                                       reorder=reorder)
+        self.q2 = InjectiveBranchModel(observation_shape,
+                                       actions_shape,
+                                       injection_shape=(len(action_shape, )),
+                                       encoder=encoder,
+                                       encoded_dim=encoded_dim,
+                                       optimizer=optimizer,
+                                       lr=lr_cr,
+                                       discrete=discrete,
+                                       deterministic=deterministic,
+                                       flatten=flatten,
+                                       reorder=reorder)
+
+        self.networks = nn.ModuleDict({
+            'policy': self.pi,
+            'q-value1': self.q1,
+            'q-value2': self.q2
+        })
+
         self.init_param(self.pi)
         self.init_param(self.q1)
         self.init_param(self.q2)
 
-
-    #@TorchModel.sharedbranch
+    @TorchModel.sharedbranch
     def forward(self, obs, **kwargs):
         obs = obs.to(self.device)
+        state = self.encoder(obs)
 
-        
-    def infer(self, x):
-        ir = self.encoder(x)
-        ac_dist = self.actor(ir)
+        act_probs = self.pi(state)
+        # deal with log nan with log 0s
+        act_log_probs = T.log(act_probs, out=T.Tensor(self.eps))
+        max_act = T.argmax(act_probs)
 
-        return ac_dist
+        return act_probs, act_log_probs, max_act
 
-    def step(self, loss):
-        self.optimizer.zero_grad()
+    def act(self, obs):
+        act_probs, _, _ = self.forward(obs)
+        action = act_probs.sample()
 
-        loss.backward()
+        return action
 
-        nn.utils.clip_grad_norm(self.actor.parameters(), self.max_grad)
-        nn.utils.clip_grad_norm(self.encoder.parameters(), self.max_grad)
-        nn.utils.clip_grad_norm(self.critic.parameters(), self.max_grad)
-
-        self.optimizer.step()
+    def update_trg(self):
+        # soft target update
+        self.pi.update_trg()
+        self.q1.update_trg()
+        self.q2.update_trg()
 
     def save(self, save_dir):
-        # torch.save(os.path.join(save_path, 'actor_critic.pt'), self.state_dict())
-        torch.save(os.path.join(save_dir, 'encoder.pt'))
-        torch.save(os.path.join(save_dir, 'actor.pt'))
-        torch.save(os.path.join(save_dir, 'critic.pt'))
+        T.save(self.networks, os.path.join(save_dir, 'sac_discrete.pt'))
+        print('model saved in {}'.format(save_dir))
 
     def load(self, save_dir):
-        self.encoder = torch.load(os.path.join(save_dir, 'encoder.pt'))
-        self.actor = torch.load(os.path.join(save_dir, 'actor.pt'))
-        self.critic = torch.load(os.path.join(save_dir, 'critic.pt'))
-
+        self.networks = T.load(os.path.join(save_dir, 'sac_discrete.pt'))
+        self.pi.load_state_dict(self.networks['policy'])
+        self.q1.load_state_dict(self.networks['q-value1'])
+        self.q2.load_state.dict(self.networks['q-value2'])
+        print('model loaded from {}'.format(save_dir))
 
 
 class SACAGent_DISC(Agent):
-    def __init__(self,
-                 model=SACModel,
-                 n_env=1,
-                 buffer_cls: ReplayBuffer=ReplayBuffer,
-                 buffer_kwargs: dict=None, #TODO
-                 batch_size: int=None, #TODO
-                 train_interval: int=None, #TODO
-                 num_epochs: int=1, #TODO
-                 loss_func: Callable=loss_func, 
-                 **kwargs):
+    def __init__(
+            self,
+            model=SACModel,
+            n_env=1,
+            buffer_cls: ReplayBuffer = ReplayBuffer,
+            buffer_kwargs: dict = None,  # TODO
+            batch_size: int = None,  # TODO
+            train_interval: int = None,  # TODO
+            num_epochs: int = 1,  # TODO
+            loss_func: Callable = loss_func,
+            **kwargs):
 
         if 'config' in kwargs.keys():
             self.config = EasyDict(kwargs.get('config'))
@@ -150,7 +185,8 @@ class SACAGent_DISC(Agent):
 
         if buffer_kwargs is None:
             buffer_kwargs = {'size': self.config.buffer}
-        super().__init__(model, train_interval, num_epochs, buffer_cls, buffer_kwargs)
+        super().__init__(model, train_interval, num_epochs, buffer_cls,
+                         buffer_kwargs)
 
 
 
@@ -164,22 +200,21 @@ class SACAGent_DISC(Agent):
         pass
 
 
-
 class SACMAGENT_DISC(MAgent):
     def __init__(self):
-        #TODO
+        # TODO
         pass
 
     def train(self, **kwargs):
-        #TODO
+        # TODO
         pass
 
     def act(self, **kwargs):
-        #TODO
+        # TODO
         pass
 
     def train(self):
-        #TODO
+        # TODO
         pass
 
 
