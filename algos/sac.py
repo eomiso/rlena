@@ -18,6 +18,9 @@ from rl2.models.torch.base import InjectiveBranchModel, TorchModel, BranchModel
 from rl2.agents.base import MAgent, Agent
 from rl2.buffers.base import ReplayBuffer
 from rl2.buffers.prioritized import PrioritizedReplayBuffer
+from algos.buffer import CustomBuffer
+
+import pprint
 
 
 def loss_func_ac(data, model, **kwargs):
@@ -51,6 +54,8 @@ def loss_func_ac(data, model, **kwargs):
 def loss_func_cr(data, model, **kwargs):
     weights = kwargs['weights']
 
+    import pdb
+    pdb.set_trace()
     obs, a, r, d, obs_ = tuple(
         map(lambda x: torch.from_numpy(x).float().to(model.device), data))
 
@@ -113,6 +118,8 @@ class SACModel(TorchModel):
             **kwargs):
 
         self.device = device  # TODO
+        assert 'injection_shape' in kwargs, "You need injection_shape for additional info"
+        self.injection_shape = kwargs['injection_shape']
 
         super().__init__(obs_shape, (action_shape, ), **kwargs)
         if hasattr(encoder, 'output_shape'):
@@ -149,39 +156,49 @@ class SACModel(TorchModel):
                                             eps=self.eps)
 
         # stochastic policy network
-        self.pi = InjectiveBranchModel(obs_shape, (action_shape, ),
-                                       injection_shape=(9, ),
-                                       encoder=encoder,
-                                       optimizer=optim_ac,
-                                       lr=lr_ac,
-                                       discrete=discrete,
-                                       deterministic=deterministic,
-                                       reorder=reorder,
-                                       flatten=flatten,
-                                       **kwargs)
+        self.pi = InjectiveBranchModel(
+            obs_shape,
+            (action_shape, ),
+            #injection_shape=additional_shape,
+            encoder=encoder,
+            optimizer=optim_ac,
+            lr=lr_ac,
+            discrete=discrete,
+            deterministic=deterministic,
+            reorder=reorder,
+            flatten=flatten,
+            **kwargs)
 
         # q network
-        self.q1 = InjectiveBranchModel(obs_shape, (action_shape, ),
-                                       injection_shape=(action_shape, ),
-                                       encoder=encoder,
-                                       encoded_dim=encoded_dim,
-                                       optimizer=optim_cr,
-                                       lr=lr_cr,
-                                       discrete=discrete,
-                                       deterministic=deterministic,
-                                       flatten=flatten,
-                                       reorder=reorder)
+        self.q1 = InjectiveBranchModel(
+            obs_shape,
+            (action_shape, ),
+            #injection_shape=additional_shape,
+            encoder=encoder,
+            encoded_dim=encoded_dim,
+            optimizer=optim_cr,
+            lr=lr_cr,
+            discrete=discrete,
+            deterministic=deterministic,
+            flatten=flatten,
+            reorder=reorder,
+            make_target=True,
+            **kwargs)
 
-        self.q2 = InjectiveBranchModel(obs_shape, (action_shape, ),
-                                       injection_shape=(action_shape, ),
-                                       encoder=encoder,
-                                       encoded_dim=encoded_dim,
-                                       optimizer=optim_cr,
-                                       lr=lr_cr,
-                                       discrete=discrete,
-                                       deterministic=deterministic,
-                                       flatten=flatten,
-                                       reorder=reorder)
+        self.q2 = InjectiveBranchModel(
+            obs_shape,
+            (action_shape, ),
+            #injection_shape=injection_shape,
+            encoder=encoder,
+            encoded_dim=encoded_dim,
+            optimizer=optim_cr,
+            lr=lr_cr,
+            discrete=discrete,
+            deterministic=deterministic,
+            flatten=flatten,
+            reorder=reorder,
+            make_target=True,
+            **kwargs)
 
         self.networks = nn.ModuleDict({
             'policy': self.pi,
@@ -195,13 +212,19 @@ class SACModel(TorchModel):
 
     @TorchModel.sharedbranch
     def forward(self, obs, **kwargs):
-        obs = obs.to(self.device)
-        state = self.encoder(obs)
-
-        act_probs = self.pi(state)
+        #pprint.pprint(obs[0])
+        #obs = T.tensor(obs)
+        #obs = obs.to(self.device)
+        #state = self.encoder(obs)
+        locational = obs.get('locational')
+        locational = T.tensor(locational, dtype=T.float32)
+        injection = obs.get('additional')
+        injection = T.tensor(injection, dtype=T.float32)
+        act_probs = self.pi(locational, injection)
         # deal with log nan with log 0s
-        act_log_probs = T.log(act_probs, out=T.Tensor(self.eps))
-        max_act = T.argmax(act_probs)
+        act_log_probs = T.log(act_probs.probs.detach()[0],
+                              out=T.tensor(self.eps))
+        max_act = T.argmax(act_probs.probs)
 
         return act_probs, act_log_probs, max_act
 
@@ -213,7 +236,6 @@ class SACModel(TorchModel):
 
     def update_trg(self):
         # soft target update
-        self.pi.update_trg()
         self.q1.update_trg()
         self.q2.update_trg()
 
@@ -233,42 +255,53 @@ class SACModel(TorchModel):
 class SACAGent_DISC(Agent, BaseAgent):
     def __init__(self,
                  model: TorchModel,
-                 buffer_cls: ReplayBuffer = PrioritizedReplayBuffer,
+                 buffer_cls: ReplayBuffer = ReplayBuffer,
                  buffer_size: int = int(1e6),
                  buffer_kwargs: dict = None,
                  batch_size: int = None,
                  num_epochs: int = None,
-                 update_interval: int = None,
-                 train_interval: int = None,
+                 update_interval: int = 5,
+                 train_interval: int = 10,
+                 train_after: int = 10,
+                 update_after: int = 5,
+                 use_per: bool = False,
                  **kwargs):
 
         # for pommerman need to initialiize the base agent
         if 'character' in kwargs:
             self._character = kwargs.get('character')
 
+        self.save_interval = kwargs['save_interval']
         self.train_interval = train_interval
         self.update_interval = update_interval
         self.batch_size = batch_size
+        self.train_after = train_after
+        self.update_after = update_after
+        self.use_per = use_per
 
         if buffer_kwargs is None:
             buffer_kwargs = {
-                'capacity': buffer_size,
+                'size': buffer_size,
                 'elements': {
-                    'state': model.observation_shape,
-                    'action': model.action_shape,
+                    'state': (model.observation_shape, model.injection_shape,
+                              np.float32),
+                    'action': (model.action_shape, np.float32),
                     'reward': ((1, ), np.float32),
                     'done': ((1, ), np.uint8),
-                    'state_p': model.observation_shape
+                    'state_p': (model.observation_shape, model.injection_shape,
+                                np.float32)
                 }
             }
 
         super().__init__(model, train_interval, num_epochs, buffer_cls,
                          buffer_kwargs)
 
-    def act(self, obs):
+        self.buffer = CustomBuffer(**buffer_kwargs)
+
+    def act(self, obs, action_space):
         # get the action from policy
         action = self.model.act(obs)
-        action = actoin.detach().cpu().numpy()
+        action = action.detach().cpu().numpy()
         self.action_param = action
 
         return action
@@ -276,8 +309,8 @@ class SACAGent_DISC(Agent, BaseAgent):
     def step(self, s, a, r, d, s_):
         # update critic1, critic2, actor, and the temperature
         self.curr_step += 1
-        if self.model.discrete:
-            a = self.action_param
+        #if self.model.discrete:
+        #    a = self.action_param
         self.collect(s, a, r, d, s_)
         info = {}
         if (self.curr_step % self.train_interval == 0
@@ -296,11 +329,12 @@ class SACAGent_DISC(Agent, BaseAgent):
 
     def train(self):
         if self.use_per:
-            batch, weights = self.memory.sample(self.batch_size)
+            batch, weights = self.buffer.sample(self.batch_size)
         else:
-            batch = self.memory.sample(self.batch_size)
+            batch = self.buffer.sample(self.batch_size)
             weights = 1.
-
+        import pdb
+        pdb.set_trace()
         l_q1, l_q2, errors, mean_q1, mean_q2 = loss_func_cr(batch,
                                                             self.model,
                                                             weights=weights)
@@ -315,12 +349,13 @@ class SACAGent_DISC(Agent, BaseAgent):
         self.model.entropy_loss.backward()
         self.model.alpha_optim.step()
 
-    def collect(self, obss: Iterable, acs: Iterable, rews: Iterable,
-                dones: Iterable, obss_p: Iterable):
+    def collect(self, obs, ac, rew, done, obs_):
         # Store given observations
-        for i, (obs, ac, rew, done,
-                obs_p) in enumerate(zip(obss, acs, rews, dones, obss_p)):
-            self.buffers[i].push(obs, ac, rew, done, obs_p)
+        self.buffer.push(state=obs,
+                         action=ac,
+                         reward=rew,
+                         done=done,
+                         state_p=obs_)
 
 
 class SACMAGENT_DISC(MAgent):
