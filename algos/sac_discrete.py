@@ -28,10 +28,12 @@ def loss_func_ac(data, model, **kwargs):
     # Q and action entropies.
     act_dist, log_act_probs, _ = model(obs)
     loc, add = model.preprocessor(obs)
+    loc, add = tuple(
+        map(lambda x: T.from_numpy(x).float().to(model.device), [loc, add]))
     with T.no_grad():
         q1 = model.q1(loc, add)
         q2 = model.q2(loc, add)
-        q = min(q1, q2)
+        q = T.min(q1, q2)
 
     # Expectation of entropies
     entropies = -T.sum(act_dist.probs * log_act_probs, dim=1, keepdim=True)
@@ -54,19 +56,24 @@ def loss_func_cr(data, model, **kwargs):
     next_act_dist, next_log_act_probs, _ = model(obs_)
 
     next_loc, next_add = model.preprocessor(obs_)
-    import pdb
-    pdb.set_trace()
+    next_loc, next_add = map(
+        lambda x: T.from_numpy(x).float().to(model.device),
+        [next_loc, next_add])
     next_q1 = model.q1.forward_trg(next_loc, next_add)
     next_q2 = model.q2.forward_trg(next_loc, next_add)
-
     next_state_val = (
         next_act_dist.probs *
-        (min(next_q1, next_q2) - model.alpha * next_log_act_probs)).sum(
+        (T.min(next_q1, next_q2) - model.alpha * next_log_act_probs)).sum(
             dim=1, keepdim=True)
-    soft_q_func = reward + (1.0 - done) * model.gamma * next_state_val
+    soft_q_func = rewards + (1.0 - dones) * model.gamma * next_state_val
+
     loc, add = model.preprocessor(obs)
+    loc, add = tuple(
+        map(lambda x: T.from_numpy(x).float().to(model.device), [loc, add]))
+
     curr_q1 = model.q1(loc, add)
     curr_q2 = model.q2(loc, add)
+
     q1_loss = F.mse_loss(curr_q1, soft_q_func)
     q2_loss = F.mse_loss(curr_q2, soft_q_func)
 
