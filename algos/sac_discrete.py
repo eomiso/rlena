@@ -48,15 +48,16 @@ def loss_func_cr(data, model, **kwargs):
     obs, _, reward, done, obs_ = tuple(
         map(lambda x: T.from_numpy(x).float().to(model.device), data))
 
-    next_act_probs, next_log_act_probs, _ = model(obs_)
+    next_act_dist, next_log_act_probs, _ = model(obs_)
     next_loc, next_add = model.preprocessor(obs_)
 
     next_q1 = model.q1.forward_trg(next_loc, next_add)
     next_q2 = model.q2.forward_trg(next_loc, next_add)
 
-    next_state_val = next_act_probs * (min(next_q1, next_q2) -
-                                       model.alpha * next_log_act_probs).sum(
-                                           dim=1, keepdim=True)
+    next_state_val = (
+        next_act_dist.probs *
+        (min(next_q1, next_q2) - model.alpha * next_log_act_probs)).sum(
+            dim=1, keepdim=True)
     soft_q_func = reward + (1.0 - done) * model.gamma * next_state_val
     loc, add = model.preprocessor(obs)
     curr_q1 = model.q1(loc, add)
@@ -252,6 +253,7 @@ class SACAgentDISC(Agent, BaseAgent):
         self.train_interval = train_interval
         self.train_after = train_after
         self.save_interval = save_interval
+        self.batch_size = batch_size
 
         super().__init__(model, train_interval, num_epochs, buffer_cls,
                          buffer_kwargs)
