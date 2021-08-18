@@ -26,7 +26,7 @@ def loss_func_ac(data, model, **kwargs):
 
     # (Log of) probabilities to calculate expectations of
     # Q and action entropies.
-    act_probs, log_act_probs, _ = model(obs)
+    act_dist, log_act_probs, _ = model(obs)
     loc, add = model.preprocessor(obs)
     with T.no_grad():
         q1 = model.q1(loc, add)
@@ -34,7 +34,7 @@ def loss_func_ac(data, model, **kwargs):
         q = min(q1, q2)
 
     # Expectation of entropies
-    entropies = -T.sum(act_probs * log_act_probs, dim=1, keepdim=True)
+    entropies = -T.sum(act_dist.probs * log_act_probs, dim=1, keepdim=True)
 
     # Expecdtation of q values
     q = T.sum(act_probs * q, dim=1, keepdim=True)
@@ -45,12 +45,17 @@ def loss_func_ac(data, model, **kwargs):
 
 
 def loss_func_cr(data, model, **kwargs):
-    obs, _, reward, done, obs_ = tuple(
+    obs, actions, rewards, dones, obs_ = data
+
+    data = [rewards, dones]
+    rewards, dones = tuple(
         map(lambda x: T.from_numpy(x).float().to(model.device), data))
 
     next_act_dist, next_log_act_probs, _ = model(obs_)
-    next_loc, next_add = model.preprocessor(obs_)
 
+    next_loc, next_add = model.preprocessor(obs_)
+    import pdb
+    pdb.set_trace()
     next_q1 = model.q1.forward_trg(next_loc, next_add)
     next_q2 = model.q2.forward_trg(next_loc, next_add)
 
@@ -157,6 +162,7 @@ class SACModelDISC(TorchModel):
                                        lr=lr_cr,
                                        discrete=discrete,
                                        deterministic=deterministic,
+                                       make_target=True,
                                        **kwargs)
         self.q2 = InjectiveBranchModel(obs_shape,
                                        action_shape,
@@ -165,6 +171,7 @@ class SACModelDISC(TorchModel):
                                        head=self.q2_head,
                                        optimizer=optim_cr,
                                        lr=lr_cr,
+                                       make_target=True,
                                        **kwargs)
 
         # set Alpha tuning
@@ -187,7 +194,12 @@ class SACModelDISC(TorchModel):
         loc, inj = self.preprocessor(obs)
         loc, inj = map(lambda x: T.from_numpy(x).float().to(self.device),
                        [loc, inj])
-        act_dist = self.pi(loc, inj.unsqueeze(0))
+
+        # without batch
+        if len(inj.shape) == 1:
+            inj = inj.unsqueeze(0)
+
+        act_dist = self.pi(loc, inj)
         act_log_probs = T.log(act_dist.probs.detach()[0],
                               out=T.tensor(self.eps))
 
