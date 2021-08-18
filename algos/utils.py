@@ -72,6 +72,8 @@ class CustomEnvWrapper(Pomme):
             # Gather infos
             locational = []
             additional = []
+            import pdb
+            pdb.set_trace()
             for k, v in d.items():
                 if hasattr(v, 'shape'):
                     # Make border walls for locational obs
