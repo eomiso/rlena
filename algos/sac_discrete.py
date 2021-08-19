@@ -2,11 +2,13 @@ from typing import Dict, Iterable, Callable
 import numpy as np
 from pathlib import Path
 import os
+import date
 import random
 
 import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.tensorboard import SummaryWriter
 
 from rl2.models.torch.base import BaseEncoder, TorchModel, InjectiveBranchModel
 from rl2.networks.torch.networks import ConvEnc, MLP
@@ -279,6 +281,7 @@ class SACAgentDISC(Agent, BaseAgent):
                  train_after: int = 256,
                  train_interval: int = 10,
                  save_interval: int = 5000,
+                 save_dir: str = None,
                  log_dir: str = None,
                  **kwargs):
 
@@ -298,7 +301,10 @@ class SACAgentDISC(Agent, BaseAgent):
         super().__init__(model, train_interval, num_epochs, buffer_cls,
                          buffer_kwargs)
 
+        self.save_dir = save_dir
         self.log_dir = log_dir
+        self.summary = SummaryWriter(
+            os.join(log_dir, date.strftime("%Y%b%d_%H_%M_%S")))
 
     def act(self, obs, rand=False):
         if rand:
@@ -322,13 +328,21 @@ class SACAgentDISC(Agent, BaseAgent):
         if (self.curr_step % self.train_interval == 0
                 and self.curr_step > self.train_after):
             info = self.train()
+
+            # tensorboard
+            for k, v in info:
+                if isinstance(v, Iterable):
+                    self.summary.add_scalars(k, sum(info[k]))
+                else:
+                    self.summary.add_scalars(k, info[k])
+
         if (self.curr_step % self.update_interval == 0
                 and self.curr_step > self.update_after):
             self.model.update_trg()
 
         # TODO Save model
         if (self.curr_step % self.save_interval == 0 and self.model.is_save):
-            save_dir = os.path.join(self.log_dir,
+            save_dir = os.path.join(self.save_dir,
                                     f'ckpt/{int(self.curr_step/1000)}k')
             Path(save_dir).mkdir(parents=True, exist_ok=True)
             self.model.save(save_dir)
@@ -345,10 +359,10 @@ class SACAgentDISC(Agent, BaseAgent):
         l_alpha = loss_func_alpha(entropies, self.model)
 
         info = {
-            'q_loss': (l_q1, l_q2),
+            'q_loss': (l_q1.detach(), l_q2.detach()),
             'q_value': (m_q1, m_q2),
-            'pi_loss': l_pi,
-            'alpha_loss': l_alpha,
+            'pi_loss': l_pi.detach(),
+            'alpha_loss': l_alpha.detach(),
             'entropies': entropies
         }
 
