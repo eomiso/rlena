@@ -34,8 +34,7 @@ argparser.add_argument('--max_step', type=int, default=1000)
 
 args = argparser.parse_args()
 
-args.device = torch.device(
-    'cuda:{}'.format(args.cuda_device) if torch.cuda.is_available() else 'cpu')
+args.device = 'cuda:{}'.format(args.cuda_device) if torch.cuda.is_available() else 'cpu'
 
 env_config = one_vs_one_env()
 env_config['env_kwargs']['agent_view_size'] = 4

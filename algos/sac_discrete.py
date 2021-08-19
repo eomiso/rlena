@@ -129,7 +129,6 @@ class SACModelDISC(TorchModel):
             flatten: bool = False,  # True if you don't need CNN in the encoder
             reorder: bool = False,  # Flag for (C, H, W)
             additional: bool = False,
-            device: T.device = None,
             preprocessor: Callable = None,
             **kwargs):
 
@@ -139,7 +138,6 @@ class SACModelDISC(TorchModel):
 
         self.injection_shape = kwargs.get('injection_shape', 8)
         del kwargs['injection_shape']
-        self.device = device
 
         self.gamma = gamma
         self.encoded_dim = encoded_dim
@@ -183,7 +181,6 @@ class SACModelDISC(TorchModel):
                                        lr=lr_ac,
                                        discrete=discrete,
                                        deterministic=deterministic,
-                                       device=device,
                                        **kwargs)
         self.q1 = IBMWithNormalization(obs_shape,
                                        action_shape,
@@ -195,7 +192,6 @@ class SACModelDISC(TorchModel):
                                        discrete=discrete,
                                        deterministic=deterministic,
                                        make_target=True,
-                                       device=device,
                                        **kwargs)
         self.q2 = IBMWithNormalization(obs_shape,
                                        action_shape,
@@ -205,7 +201,6 @@ class SACModelDISC(TorchModel):
                                        optimizer=optim_cr,
                                        lr=lr_cr,
                                        make_target=True,
-                                       device=device,
                                        **kwargs)
 
         # set Alpha tuning
@@ -235,7 +230,7 @@ class SACModelDISC(TorchModel):
 
         act_dist = self.pi(loc, inj)
         act_log_probs = T.log(act_dist.probs.detach()[0],
-                              out=T.tensor(self.eps))
+                              out=T.tensor(self.eps).to(self.device))
 
         max_act = T.argmax(act_dist.probs)
 

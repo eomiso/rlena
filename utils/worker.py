@@ -56,7 +56,7 @@ class SimpleWorker:
 
                 # the buffer should save the action discributions
                 dist, _, _ = agent.model(obs[agent_id])
-                action_dist[agent_id] = dist.probs.detach()[0].numpy()
+                action_dist[agent_id] = dist.probs.detach()[0].cpu().numpy()
 
             if self.render:
                 self.env.render()
