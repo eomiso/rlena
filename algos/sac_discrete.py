@@ -129,7 +129,7 @@ class SACModelDISC(TorchModel):
             flatten: bool = False,  # True if you don't need CNN in the encoder
             reorder: bool = False,  # Flag for (C, H, W)
             additional: bool = False,
-            device: str = None,
+            device: T.device = None,
             preprocessor: Callable = None,
             **kwargs):
 
