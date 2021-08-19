@@ -35,11 +35,8 @@ class SimpleWorker:
     def run(self):
         with T.autograd.set_detect_anomaly(True):
             while self.episode_cnt < self.max_episode:
-                try:
-                    self.rollout()
-                    self.episode_cnt += 1
-                except RuntimeError as e:
-                    print(e)
+                self.rollout()
+                self.episode_cnt += 1
 
     def rollout(self):
         step_cnt = 0
@@ -53,8 +50,9 @@ class SimpleWorker:
             actions = self.env.act(obs)
             for agent in self.trainee_agents:
                 agent_id = agent.agent_id
-                actions[agent_id] = agent.act(
-                    obs[agent_id], rand=self.random_until > step_cnt)
+                actions[agent_id] = agent.act(obs[agent_id],
+                                              rand_until=self.random_until)
+                print('actions: {}'.format(actions))
 
                 # the buffer should save the action discributions
                 dist, _, _ = agent.model(obs[agent_id])
@@ -72,3 +70,5 @@ class SimpleWorker:
 
             obs = obs_
             step_cnt += 1
+            if done:
+                print('Episode {} finished'.format(self.episode_cnt))
