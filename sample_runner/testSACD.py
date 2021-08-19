@@ -1,5 +1,4 @@
-from algos.sac import SACModel, SACAGent_DISC
-from algos.utils import CustomEnvWrapper
+from algos.sac_discrete import SACAgentDISC, SACModelDISC
 
 from easydict import EasyDict
 
@@ -8,6 +7,7 @@ import pommerman.envs as envs
 from pommerman import constants, characters
 from pommerman.agents import SimpleAgent
 from pommerman.characters import Bomber
+from utils.wrapper import ConservativeEnvWrapper
 
 import gym
 import pommerman
@@ -17,18 +17,23 @@ from pommerman.envs.v0 import Pomme
 
 from rl2.workers.base import RolloutWorker
 from rl2.models.torch.base import BaseEncoder
-from rl2.buffers.prioritized import PrioritizedReplayBuffer
+from rl2.buffers.base import ReplayBuffer
+from utils.worker import SimpleWorker
 
 import pprint
 
 env_config = one_vs_one_env()
 env_config['env_kwargs']['agent_view_size'] = 4
-env = CustomEnvWrapper(env_config)
+env_config['env_kwargs']['max_step'] = 200
+env = ConservativeEnvWrapper(env_config)
 
 myconfig = {
     'gamma': 0.99,
-    'train_interval': 1,
-    'update_interval': 1,
+    'train_interval': 10,
+    'train_after': 256,
+    'update_interval': 30,
+    'update_after': 256,
+    'save_interval': 5000,
     'batch_size': 128
 }
 
@@ -39,68 +44,65 @@ action_shape = env.action_space.n if hasattr(env.action_space,
 
 observation_shape, additional_shape = env.observation_shape
 
-model = SACModel(observation_shape,
-                 action_shape,
-                 discrete=True,
-                 injection_shape=additional_shape)
+
+def obs_handler(obs, keys=['locational', 'additional']):
+    if isinstance(obs, dict):
+        loc, add = [obs[key] for key in keys]
+    else:
+        loc = []
+        add = []
+        for o in obs:
+            loc.append(o[0]['locational'])
+            add.append(o[0]['additional'])
+        loc = np.stack(loc, axis=0)
+        add = np.stack(add, axis=0)
+    return loc, add
+
+
+model = SACModelDISC(observation_shape, (action_shape, ),
+                     discrete=True,
+                     injection_shape=additional_shape,
+                     preprocessor=obs_handler,
+                     is_save=True)
 # observation: tuple, action_shape: int
 
-trainee_agent = SACAGent_DISC(model,
-                              batch_size=config.batch_size,
-                              train_interval=config.train_interval,
-                              update_interval=config.update_interval,
-                              save_interval=1000,
-                              character=Bomber(0, env_config["game_type"]))
+buffer_kwargs = {
+    'size': 1e6,
+    'elements': {
+        'obs': ((5, 9, 9), (8, ), np.float32),
+        'action': ((6, ), np.float32),
+        'reward': ((1, ), np.float32),
+        'done': ((1, ), np.float32),
+        'obs_': ((5, 9, 9), (8, ), np.float32)
+    }
+}
+
+trainee_agent = SACAgentDISC(model,
+                             batch_size=config.batch_size,
+                             train_interval=config.train_interval,
+                             update_interval=config.update_interval,
+                             save_interval=100,
+                             buffer_cls=ReplayBuffer,
+                             buffer_kwargs=buffer_kwargs,
+                             log_dir='sac_discrete/',
+                             character=Bomber(0, env_config["game_type"]))
 
 agents = {
     0: trainee_agent,
     1: SimpleAgent(env_config['agent'](1, env_config["game_type"])),
 }
 
-env.set_trainee_agents(0)
-#print(env._trainee_agents)
-env.set_agents(list(agents.values()))
 env.set_init_game_state(None)
+env.set_agents(list(agents.values()))
+env.set_training_agents(0)
 env.seed(44)
 
-obs = env.reset()
-print(len(obs))
-
-
-class SimpleWorker:
-    def __init__(self, env, trainee_agent, training, render, max_step_size,
-                 is_save, **kwargs):
-        self.env = env
-        self.agent = trainee_agent
-        self.training = training
-        self.render = render
-        self.is_save = is_save
-        self.max_step_size = max_step_size
-
-    def rollout(self):
-        self.agent.curr_step = 0
-        obs = self.env.reset()
-        done = False
-        while not done and self.agent.curr_step < self.max_step_size:
-            actions = self.env.act(obs)
-            print(actions)
-            obs_, rewards, done, info = self.env.step(actions)
-            self.agent.step(obs[0], actions[0], rewards[0], done, obs_[0])
-            obs = obs_
-
-
-# get partial obs
-
 worker = SimpleWorker(env,
-                      trainee_agent,
-                      training=True,
+                      agents=[trainee_agent],
                       render=True,
-                      max_step_size=1000,
-                      is_save=True)
+                      max_step=200,
+                      random_until=400)
 
-worker.rollout()
-#print(obs)
-#for i, p in enumerate(obs):
-#    print(i)
-#    for k, v in p.items():
-#        print(k, v)
+print(worker.__dict__)
+
+worker.run()
