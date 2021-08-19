@@ -16,17 +16,21 @@ from rl2.buffers.base import ReplayBuffer
 
 from pommerman.agents.base_agent import BaseAgent
 
+from utils.model import IBMWithNormalization
+
 __all__ = ['SACAgentDISC', 'SACModelDISC']
+
+training_cnt = 0
 
 
 # batch of states, actions, rewards, next_states
 def loss_func_ac(data, model, **kwargs):
-    obs, _, _, _, _ = tuple(
-        map(lambda x: T.from_numpy(x).float().to(model.device), data))
+    obs, _, _, _, _ = data
 
     # (Log of) probabilities to calculate expectations of
     # Q and action entropies.
     act_dist, log_act_probs, _ = model(obs)
+
     loc, add = model.preprocessor(obs)
     loc, add = tuple(
         map(lambda x: T.from_numpy(x).float().to(model.device), [loc, add]))
@@ -39,11 +43,16 @@ def loss_func_ac(data, model, **kwargs):
     entropies = -T.sum(act_dist.probs * log_act_probs, dim=1, keepdim=True)
 
     # Expecdtation of q values
-    q = T.sum(act_probs * q, dim=1, keepdim=True)
+    q = T.sum(act_dist.probs * q, dim=1, keepdim=True)
+
+    #pi_loss = model.alpha * (-entropies) - q
+    #pi_loss[pi_loss == 0.] = model.eps
 
     pi_loss = (model.alpha * (-entropies) - q).mean()
+    #if not pi_loss:
+    #    pi_loss = model.eps
 
-    return pi_loss, entropies.detach()
+    return pi_loss, entropies.mean().detach()
 
 
 def loss_func_cr(data, model, **kwargs):
@@ -59,8 +68,10 @@ def loss_func_cr(data, model, **kwargs):
     next_loc, next_add = map(
         lambda x: T.from_numpy(x).float().to(model.device),
         [next_loc, next_add])
+
     next_q1 = model.q1.forward_trg(next_loc, next_add)
     next_q2 = model.q2.forward_trg(next_loc, next_add)
+
     next_state_val = (
         next_act_dist.probs *
         (T.min(next_q1, next_q2) - model.alpha * next_log_act_probs)).sum(
@@ -74,8 +85,16 @@ def loss_func_cr(data, model, **kwargs):
     curr_q1 = model.q1(loc, add)
     curr_q2 = model.q2(loc, add)
 
+    #soft_bellman_residual1 = curr_q1 - soft_q_func
+    #soft_bellman_residual2 = curr_q2 - soft_q_func
+
+    #soft_bellman_residual1[soft_bellman_residual1 == 0.] = model.eps
+    #soft_bellman_residual2[soft_bellman_residual2 == 0.] = model.eps
     q1_loss = F.mse_loss(curr_q1, soft_q_func)
     q2_loss = F.mse_loss(curr_q2, soft_q_func)
+
+    #q1_loss = (.5 * soft_bellman_residual1**2).mean()
+    #q2_loss = (.5 * soft_bellman_residual2**2).mean()
 
     return q1_loss, q2_loss, curr_q1.mean().detach(), curr_q2.mean().detach()
 
@@ -97,8 +116,9 @@ class SACModelDISC(TorchModel):
             head: T.nn.Module = None,
             optim_ac: str = 'torch.optim.Adam',
             optim_cr: str = 'torch.optim.Adam',
-            lr_ac: float = 3e-4,
-            lr_cr: float = 3e-4,
+            gamma: float = 0.99,
+            lr_ac: float = 1e-4,
+            lr_cr: float = 1e-4,
             grad_clip: float = 1e-2,
             polyak: float = 0.995,
             discrete: bool = True,
@@ -118,6 +138,7 @@ class SACModelDISC(TorchModel):
         del kwargs['injection_shape']
         self.device = device
 
+        self.gamma = gamma
         self.encoded_dim = encoded_dim
         self.action_shape = action_shape
 
@@ -135,7 +156,7 @@ class SACModelDISC(TorchModel):
         self.preprocessor = preprocessor
 
         # will be using encoded_dim of 256
-        self.encoder = nn.Sequential(ConvEnc(obs_shape, 256, high=10),
+        self.encoder = nn.Sequential(ConvEnc(obs_shape, 256, high=12),
                                      nn.Linear(256, encoded_dim), nn.ReLU())
 
         # input shape to head
@@ -150,7 +171,7 @@ class SACModelDISC(TorchModel):
         self.q2_head = MLP(head_shape, 1, hidden=[128], activ='ReLU')
 
         # stochastic policy network
-        self.pi = InjectiveBranchModel(obs_shape,
+        self.pi = IBMWithNormalization(obs_shape,
                                        action_shape,
                                        injection_shape=self.injection_shape,
                                        encoder=self.encoder,
@@ -160,7 +181,7 @@ class SACModelDISC(TorchModel):
                                        discrete=discrete,
                                        deterministic=deterministic,
                                        **kwargs)
-        self.q1 = InjectiveBranchModel(obs_shape,
+        self.q1 = IBMWithNormalization(obs_shape,
                                        action_shape,
                                        injection_shape=self.injection_shape,
                                        encoder=self.encoder,
@@ -171,7 +192,7 @@ class SACModelDISC(TorchModel):
                                        deterministic=deterministic,
                                        make_target=True,
                                        **kwargs)
-        self.q2 = InjectiveBranchModel(obs_shape,
+        self.q2 = IBMWithNormalization(obs_shape,
                                        action_shape,
                                        injection_shape=self.injection_shape,
                                        encoder=self.encoder,
@@ -315,6 +336,9 @@ class SACAgentDISC(Agent, BaseAgent):
         return info
 
     def train(self):
+        global training_cnt
+        print('training {}'.format(training_cnt))
+        training_cnt += 1
         batch = self.buffer.sample(self.batch_size)
         l_q1, l_q2, m_q1, m_q2 = loss_func_cr(batch, self.model)
         l_pi, entropies = loss_func_ac(batch, self.model)
@@ -328,13 +352,18 @@ class SACAgentDISC(Agent, BaseAgent):
             'entropies': entropies
         }
 
-        self.model.q1.step(l_q1)
-        self.model.q2.step(l_q2)
-        self.model.pi.step(l_pi)
+        l_q1.backward(retain_graph=True)
+        l_q2.backward(retain_graph=True)
+        l_pi.backward(retain_graph=True)
+
+        self.model.q1.optimizer.step()
+        self.model.q2.optimizer.step()
+        self.model.pi.optimizer.step()
 
         self.model.alpha_optim.zero_grad()
-        self.model.l_alpha.backward()
+        l_alpha.backward()
         self.model.alpha_optim.step()
+        print(info)
 
         return info
 
