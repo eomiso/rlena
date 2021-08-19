@@ -1,5 +1,7 @@
 import gym
 
+import torch as T
+
 from typing import List
 from rl2.agents.base import Agent
 from rl2.workers.base import RolloutWorker
@@ -31,9 +33,13 @@ class SimpleWorker:
         self.render = render
 
     def run(self):
-        while self.episode_cnt < self.max_episode:
-            self.rollout()
-            self.episode_cnt += 1
+        with T.autograd.set_detect_anomaly(True):
+            while self.episode_cnt < self.max_episode:
+                try:
+                    self.rollout()
+                    self.episode_cnt += 1
+                except RuntimeError as e:
+                    print(e)
 
     def rollout(self):
         step_cnt = 0
