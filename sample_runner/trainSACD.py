@@ -28,6 +28,9 @@ import argparse
 
 argparser = argparse.ArgumentParser(description='SACD Single agent')
 argparser.add_argument('--cuda_device', type=int, default=0)
+argparser.add_argument('--train_interval', type=int, default=1)
+argparser.add_argument('--update_interval', type=int, default=5)
+argparser.add_argument('--max_step', type=int, default=1000)
 
 args = argparser.parse_args()
 
@@ -36,18 +39,18 @@ args.device = torch.device(
 
 env_config = one_vs_one_env()
 env_config['env_kwargs']['agent_view_size'] = 4
-env_config['env_kwargs']['max_step'] = 200
+env_config['env_kwargs']['max_step'] = args.max_step
 env = ConservativeEnvWrapper(env_config)
 
 myconfig = {
     'gamma': 0.99,
-    'train_interval': 1,
+    'train_interval': args.train_interval,
     'train_after': 1024,
     'update_interval': 30,
     'update_after': 1024,
     'save_interval': 1000,
     'batch_size': 128,
-    'max_step': 1000,
+    'max_step': args.max_step,
     'random_until': 1024,
     'device': args.device
 }
