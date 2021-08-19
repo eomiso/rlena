@@ -2,8 +2,10 @@ from typing import Dict, Iterable, Callable
 import numpy as np
 from pathlib import Path
 import os
-import date
+from datetime import datetime
 import random
+
+from utils.model import IBMWithNormalization
 
 import torch as T
 import torch.nn as nn
@@ -17,8 +19,6 @@ from rl2.agents.base import Agent
 from rl2.buffers.base import ReplayBuffer
 
 from pommerman.agents.base_agent import BaseAgent
-
-from utils.model import IBMWithNormalization
 
 __all__ = ['SACAgentDISC', 'SACModelDISC']
 
@@ -73,6 +73,7 @@ def loss_func_cr(data, model, **kwargs):
 
     next_q1 = model.q1.forward_trg(next_loc, next_add)
     next_q2 = model.q2.forward_trg(next_loc, next_add)
+    print(next_log_act_probs)
 
     next_state_val = (
         next_act_dist.probs *
@@ -241,7 +242,7 @@ class SACModelDISC(TorchModel):
         act_probs, _, _ = self.forward(obs)
         action = act_probs.sample()
 
-        return action
+        return action.item()
 
     def update_trg(self):
         self.q1.update_trg()
@@ -280,7 +281,7 @@ class SACAgentDISC(Agent, BaseAgent):
                  update_after: int = 256,
                  train_after: int = 256,
                  train_interval: int = 10,
-                 save_interval: int = 5000,
+                 save_interval: int = 1000,
                  save_dir: str = None,
                  log_dir: str = None,
                  **kwargs):
@@ -303,16 +304,15 @@ class SACAgentDISC(Agent, BaseAgent):
 
         self.save_dir = save_dir
         self.log_dir = log_dir
+        self.now = datetime.now()
         self.summary = SummaryWriter(
-            os.join(log_dir, date.strftime("%Y%b%d_%H_%M_%S")))
+            os.path.join(log_dir, self.now.strftime("%Y%b%d_%H_%M_%S")))
 
-    def act(self, obs, rand=False):
-        if rand:
+    def act(self, obs, rand_until=1024):
+        if self.curr_step < rand_until:
             action = np.float(random.randint(0, 5))
         else:
             action = self.model.act(obs)
-            action = action.detach().cpu().numpy()
-            self.action_param = action
 
         return action
 
@@ -330,11 +330,11 @@ class SACAgentDISC(Agent, BaseAgent):
             info = self.train()
 
             # tensorboard
-            for k, v in info:
-                if isinstance(v, Iterable):
-                    self.summary.add_scalars(k, sum(info[k]))
+            for k, v in info.items():
+                if isinstance(v, tuple):
+                    self.summary.add_scalar(k, sum(info[k]), self.curr_step)
                 else:
-                    self.summary.add_scalars(k, info[k])
+                    self.summary.add_scalar(k, info[k], self.curr_step)
 
         if (self.curr_step % self.update_interval == 0
                 and self.curr_step > self.update_after):
@@ -343,9 +343,9 @@ class SACAgentDISC(Agent, BaseAgent):
         # TODO Save model
         if (self.curr_step % self.save_interval == 0 and self.model.is_save):
             save_dir = os.path.join(self.save_dir,
-                                    f'ckpt/{int(self.curr_step/1000)}k')
+                                    self.now.strftime("%Y%b%d_%H_%M_%S"))
             Path(save_dir).mkdir(parents=True, exist_ok=True)
-            self.model.save(save_dir)
+            self.model.save(save_dir + f'/{int(self.curr_step/1000)}k')
 
         return info
 
@@ -369,6 +369,13 @@ class SACAgentDISC(Agent, BaseAgent):
         l_q1.backward(retain_graph=True)
         l_q2.backward(retain_graph=True)
         l_pi.backward(retain_graph=True)
+
+        nn.utils.clip_grad_norm_(self.model.q1.parameters(),
+                                 self.model.grad_clip)
+        nn.utils.clip_grad_norm_(self.model.q2.parameters(),
+                                 self.model.grad_clip)
+        nn.utils.clip_grad_norm_(self.model.pi.parameters(),
+                                 self.model.grad_clip)
 
         self.model.q1.optimizer.step()
         self.model.q2.optimizer.step()
