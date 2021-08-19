@@ -29,11 +29,11 @@ env = ConservativeEnvWrapper(env_config)
 
 myconfig = {
     'gamma': 0.99,
-    'train_interval': 10,
-    'train_after': 256,
+    'train_interval': 1,
+    'train_after': 1024,
     'update_interval': 30,
-    'update_after': 256,
-    'save_interval': 5000,
+    'update_after': 1024,
+    'save_interval': 1000,
     'batch_size': 128
 }
 
@@ -84,7 +84,8 @@ trainee_agent = SACAgentDISC(model,
                              save_interval=100,
                              buffer_cls=ReplayBuffer,
                              buffer_kwargs=buffer_kwargs,
-                             log_dir='sac_discrete/',
+                             save_dir='sac_discrete/test/ckpt',
+                             log_dir='sac_discrete/test/log',
                              character=Bomber(0, env_config["game_type"]))
 
 agents = {
@@ -99,7 +100,7 @@ env.seed(44)
 
 worker = SimpleWorker(env,
                       agents=[trainee_agent],
-                      render=True,
+                      render=False,
                       max_step=200,
                       random_until=400)
 
