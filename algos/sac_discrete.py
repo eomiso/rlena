@@ -183,6 +183,7 @@ class SACModelDISC(TorchModel):
                                        lr=lr_ac,
                                        discrete=discrete,
                                        deterministic=deterministic,
+                                       device=device,
                                        **kwargs)
         self.q1 = IBMWithNormalization(obs_shape,
                                        action_shape,
@@ -194,6 +195,7 @@ class SACModelDISC(TorchModel):
                                        discrete=discrete,
                                        deterministic=deterministic,
                                        make_target=True,
+                                       device=device,
                                        **kwargs)
         self.q2 = IBMWithNormalization(obs_shape,
                                        action_shape,
@@ -203,6 +205,7 @@ class SACModelDISC(TorchModel):
                                        optimizer=optim_cr,
                                        lr=lr_cr,
                                        make_target=True,
+                                       device=device,
                                        **kwargs)
 
         # set Alpha tuning
