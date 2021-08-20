@@ -387,6 +387,11 @@ class SACAgentDISC(Agent, BaseAgent):
         return info
 
 
+class SACDAgentLOGGER(SACAgentDISC):
+    def __init__(self, *arg, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
 if __name__ == "__main__":
     pass
     # testing this code
