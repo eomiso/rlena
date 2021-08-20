@@ -73,7 +73,6 @@ def loss_func_cr(data, model, **kwargs):
 
     next_q1 = model.q1.forward_trg(next_loc, next_add)
     next_q2 = model.q2.forward_trg(next_loc, next_add)
-    print(next_log_act_probs)
 
     next_state_val = (
         next_act_dist.probs *
@@ -281,7 +280,8 @@ class SACAgentDISC(Agent, BaseAgent):
                  train_interval: int = 10,
                  save_interval: int = 1000,
                  save_dir: str = None,
-                 log_dir: str = None,
+                 eps: float = 0.5,
+                 rand_until: int = 1024,
                  **kwargs):
 
         # for pommerman, you need to initialiize the base agent
@@ -296,21 +296,30 @@ class SACAgentDISC(Agent, BaseAgent):
         self.train_after = train_after
         self.save_interval = save_interval
         self.batch_size = batch_size
+        self.eps = eps
+        self.rand_until = rand_until
 
         super().__init__(model, train_interval, num_epochs, buffer_cls,
                          buffer_kwargs)
 
         self.save_dir = save_dir
-        self.log_dir = log_dir
-        self.now = datetime.now()
-        self.summary = SummaryWriter(
-            os.path.join(log_dir, self.now.strftime("%Y%b%d_%H_%M_%S")))
+        Path(save_dir).mkdir(parents=True, exist_ok=True)
 
-    def act(self, obs, rand_until=1024):
-        if self.curr_step < rand_until:
+        self.now = datetime.now()
+        # self.summary = SummaryWriter(
+        #    os.path.join(log_dir, self.now.strftime("%Y%b%d_%H_%M_%S")))
+
+    def act(self, obs):
+        if self.curr_step < self.rand_until:
             action = np.float(random.randint(0, 5))
         else:
-            action = self.model.act(obs)
+            # decaying epsilon greedy
+            # eps / log(t+1e6)
+            p = np.random.random()
+            if p < self.eps/np.log((self.curr_step - self.rand_until) + 1e-6):
+                action = np.float(random.randint(0, 5))
+            else:  
+                action = self.model.act(obs)
 
         return action
 
@@ -327,29 +336,18 @@ class SACAgentDISC(Agent, BaseAgent):
                 and self.curr_step > self.train_after):
             info = self.train()
 
-            # tensorboard
-            for k, v in info.items():
-                if isinstance(v, tuple):
-                    self.summary.add_scalar(k, sum(info[k]), self.curr_step)
-                else:
-                    self.summary.add_scalar(k, info[k], self.curr_step)
-
         if (self.curr_step % self.update_interval == 0
                 and self.curr_step > self.update_after):
             self.model.update_trg()
 
         # TODO Save model
         if (self.curr_step % self.save_interval == 0 and self.model.is_save):
-            save_dir = os.path.join(self.save_dir,
-                                    self.now.strftime("%Y%b%d_%H_%M_%S"))
-            Path(save_dir).mkdir(parents=True, exist_ok=True)
-            self.model.save(save_dir + f'/{int(self.curr_step/1000)}k')
+            self.model.save(self.save_dir + f'/{int(self.curr_step/1000)}k')
 
         return info
 
     def train(self):
         global training_cnt
-        print('training {}'.format(training_cnt))
         training_cnt += 1
         batch = self.buffer.sample(self.batch_size)
         l_q1, l_q2, m_q1, m_q2 = loss_func_cr(batch, self.model)
@@ -382,7 +380,6 @@ class SACAgentDISC(Agent, BaseAgent):
         self.model.alpha_optim.zero_grad()
         l_alpha.backward()
         self.model.alpha_optim.step()
-        print(info)
 
         return info
 
