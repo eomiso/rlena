@@ -55,7 +55,7 @@ class SimpleWorker:
                 agent_id = agent.agent_id
                 actions[agent_id] = agent.act(obs[agent_id],
                                               rand_until=self.random_until)
-                print('actions: {}'.format(actions))
+                #print('actions: {}'.format(actions))
 
                 # the buffer should save the action discributions
                 dist, _, _ = agent.model(obs[agent_id])
@@ -73,14 +73,14 @@ class SimpleWorker:
 
             obs = obs_
             step_cnt += 1
-            if done:
-                print('Episode {} finished'.format(self.episode_cnt))
+            #if done:
+            #    print('Episode {} finished'.format(self.episode_cnt))
         return done
 
 
 class SACDworker(EpisodicWorker):
     def __init__(self, env, n_env, agents, n_agents, max_episodes: int,
-                 log_interval: int, logger, random_until, **kwargs):
+                 log_interval: int, logger, render, render_interval, random_until, **kwargs):
         super().__init__(env,
                          n_env,
                          agents,
@@ -89,6 +89,8 @@ class SACDworker(EpisodicWorker):
                          logger=logger,
                          **kwargs)
 
+        self.render = render
+        self.render_interval = render_interval
         self.done = False
         self.winner = deque(maxlen=10)
         self.trainee_agents = agents
@@ -97,6 +99,7 @@ class SACDworker(EpisodicWorker):
         self.random_until = random_until
         self.agents = agents
         self.n_agents = n_agents
+        self.render_mode = 'rgb_array'
 
     def rollout(self):
         action_dist = [None] * len(self.env._agents)
@@ -105,7 +108,7 @@ class SACDworker(EpisodicWorker):
         for agent in self.trainee_agents:
             i = agent.agent_id
             actions[i] = agent.act(self.obs[i], rand_until=self.random_until)
-            print('actions: {}'.format(actions))
+            #print('actions: {}'.format(actions))
             # the buffer should save the action discributions
             dist, _, _ = agent.model(self.obs[i])
             action_dist[i] = dist.probs.detach()[0].cpu().numpy()
@@ -118,12 +121,13 @@ class SACDworker(EpisodicWorker):
                 i = agent.agent_id
                 info_a = agent.step(self.obs[i], action_dist[i], rewards[i],
                                     done, obs_[i])
-                if info:
-                    if isinstance(info, dict):
-                        info.update(info_a)
-                    elif isinstance(info, Iterable):
-                        info = {**info_a}
+                for k, v in info_a.items():
+                    if isinstance(v, tuple):
+                        info[k] = sum(info_a[k])
+                    else:
+                        info[k] = info_a[k]
             self.num_steps += self.n_env
+            #self.logger.scalar_summary(info_a, self.num_steps)
             self.episode_score = self.episode_score + np.array(rewards)
             steps = ~np.asarray(done)
             self.ep_steps += steps.astype(np.int)
@@ -184,7 +188,7 @@ class SACDworker(EpisodicWorker):
 
                 self.info.update(info)
 
-                if info_r.get('is_loss', False):
+                if info_r.get('entropies', False):
                     rm_keys = ['winners', 'original_obs', 'done', 'is_loss']
                     for key in rm_keys:
                         info_r.pop(key, None)
