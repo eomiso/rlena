@@ -1,4 +1,5 @@
 import gym
+from gym.core import RewardWrapper
 import numpy as np
 from collections import deque
 
@@ -53,8 +54,7 @@ class SimpleWorker:
             actions = self.env.act(obs)
             for agent in self.trainee_agents:
                 agent_id = agent.agent_id
-                actions[agent_id] = agent.act(obs[agent_id],
-                                              rand_until=self.random_until)
+                actions[agent_id] = agent.act(obs[agent_id])
                 #print('actions: {}'.format(actions))
 
                 # the buffer should save the action discributions
@@ -88,7 +88,6 @@ class SACDworker(EpisodicWorker):
                          log_interval=log_interval,
                          logger=logger,
                          **kwargs)
-
         self.render = render
         self.render_interval = render_interval
         self.done = False
@@ -103,17 +102,22 @@ class SACDworker(EpisodicWorker):
 
     def rollout(self):
         action_dist = [None] * len(self.env._agents)
-        actions = self.env.act(
-            self.obs)  # returns (None:trainee_agents, action: simple_agent)
+        actions = self.env.act(self.obs)  # (None:trainee_agents, action: simple_agent)
+
         for agent in self.trainee_agents:
             i = agent.agent_id
-            actions[i] = agent.act(self.obs[i], rand_until=self.random_until)
+            actions[i] = agent.act(self.obs[i])
             #print('actions: {}'.format(actions))
+
             # the buffer should save the action discributions
             dist, _, _ = agent.model(self.obs[i])
             action_dist[i] = dist.probs.detach()[0].cpu().numpy()
 
         obs_, rewards, done, info = self.env.step(actions)
+        if rewards[0] == 0:
+            rewards[0] = 0.3 
+        if rewards[0] == -1:
+            rewards[0] = -5 
         self.done = done if np.asarray(done).size == 1 else any(done)
 
         if self.training:
