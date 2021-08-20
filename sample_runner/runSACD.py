@@ -65,9 +65,9 @@ model = SACModelDISC(observation_shape, (action_shape, ),
                      discrete=True,
                      injection_shape=additional_shape,
                      preprocessor=obs_handler,
-                     is_save=True)
+                     is_save=False)
 
-load_dir = 'sac_discrete/test/ckpt/2021Aug19_20_06_53/1k'
+load_dir = 'sac_discrete/train/2021Aug19_15_35_48/427k'
 model.load(load_dir)
 # observation: tuple, action_shape: int
 
@@ -106,7 +106,7 @@ env.seed(44)
 worker = SimpleWorker(env,
                       agents=[trainee_agent],
                       render=config.render,
-                      max_step=200,
+                      max_step=1000,
                       random_until=config.random_until,
                       training=False)
 

@@ -99,6 +99,7 @@ env.set_training_agents(0)
 env.seed(44)
 
 worker = SimpleWorker(env,
+                      n_env=1,
                       agents=[trainee_agent],
                       render=False,
                       max_step=200,
