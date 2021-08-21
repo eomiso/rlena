@@ -112,12 +112,13 @@ class SACDworker(EpisodicWorker):
             # the buffer should save the action discributions
             dist, _, _ = agent.model(self.obs[i])
             action_dist[i] = dist.probs.detach()[0].cpu().numpy()
+            #print(i, dist.probs)
 
         obs_, rewards, done, info = self.env.step(actions)
-        if rewards[0] == 0:
-            rewards[0] = 0.3 
-        if rewards[0] == -1:
-            rewards[0] = -5 
+        #if rewards[0] == 0:
+        #    rewards[0] = 0.3 
+        #if rewards[0] == -1:
+        #    rewards[0] = -5 
         self.done = done if np.asarray(done).size == 1 else any(done)
 
         if self.training:
@@ -137,6 +138,10 @@ class SACDworker(EpisodicWorker):
             self.ep_steps += steps.astype(np.int)
 
         if self.done:
+            if rewards[0] ==1:
+                print('win')
+            else:
+                print('loose')
             self.num_episodes += 1
             obs = self.env.reset()
             self.scores.append(self.episode_score)
