@@ -97,8 +97,9 @@ if __name__ == "__main__":
 
     env_config = one_vs_one_env()
     if args.empty_map:
-        env_config['env_kwargs']['num_rigid'] =10
-        env_config['env_kwargs']['num_wood'] =10
+        env_config['env_kwargs']['num_rigid'] = 0
+        env_config['env_kwargs']['num_wood'] = 0
+        env_config['env_kwargs']['num_items'] = 0
     env_config['env_kwargs']['agent_view_size'] = 4
     env_config['env_kwargs']['max_step'] = args.max_step
     env = ConservativeEnvWrapper(env_config)
