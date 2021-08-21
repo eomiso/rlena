@@ -51,7 +51,7 @@ if __name__ == "__main__":
     argparser.add_argument('--train_interval', type=int, default=1)
     argparser.add_argument('--update_interval', type=int, default=5)
     argparser.add_argument('--max_step', type=int, default=1000)
-    argparser.add_argument('--dir_name', type=str, default='')
+    argparser.add_argument('--dir_name', type=str, default=None)
     argparser.add_argument('--empty_map', type=bool, default=False)
     argparser.add_argument('--rand_until', type=int, default=1028)
     argparser.add_argument('--eps', type=float, default=0.5)
@@ -77,7 +77,7 @@ if __name__ == "__main__":
         'max_step': args.max_step,
         'device': args.device,
         'render':True,
-        'render_interval': 50,
+        'render_interval': 10,
         'log_interval': 10, 
         'eps': args.eps, # for decaying epsilon greedy
         'log_dir': f'./SACDexp/train/log/{dir_name}',
