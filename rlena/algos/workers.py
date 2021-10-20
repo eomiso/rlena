@@ -110,3 +110,99 @@ class ComaWorker(EpisodicWorker):
                     self.info.update(info)
 
                     self.logger.scalar_summary(self.info, self.num_steps)
+
+
+class QmixWorker:
+    def __init__(self,
+                 env,
+                 agent,
+                 critic,
+                 config):
+        self.done = True
+        self.env = env
+        self.agent1 = agent[0]
+        self.agent2 = agent[1]
+        self.critic = critic
+
+        self.config = train_config
+        self.logger = logger
+
+        self.init_config()
+
+    def init_config(self):
+        if self.config['load_model']:
+            self.agent1.load(1)
+            self.agent2.load(2)
+        if self.config['mode'] == 'train':
+            self.agent1.train()
+            self.agent2.train()
+        else:
+            self.agent1.eval()
+            self.agent2.eval()
+
+    def rollout(self):
+        actions = self.env.act(self.state)
+        global_state = self.env.get_global_obs()
+        gru_hidden = [self.agent1.gru_hidden.detach().cpu().numpy(), self.agent2.gru_hidden.detach().cpu().numpy()]
+        state_prime, reward, self.done, info = self.env.step(actions)
+
+        # add data in memory
+        if self.config['mode'] == "train":
+            critic.mem_append([state, 
+                            gru_hidden, 
+                            global_state, 
+                            actions, 
+                            reward, 
+                            self.done, 
+                            state_prime])
+        
+        self.state = state_prime
+
+        return reward
+
+    def run(self):
+        episode, r_episode_1, r_episode_2 = 0, 0, 0
+        loss = 0
+        for step in trange(int(self.config['max_step'])):
+            
+            # Episode done
+            if self.done:
+                episode += 1
+                self.state= self.env.reset()
+                
+                if episode % self.config['tensorboard_frequency'] == 0:
+                    # reward writing
+                    self.logger.add_scalars('Average reward', 
+                                    {"agent1" :r_episode_1 / self.config['tensorboard_frequency'],
+                                        "agent2" :r_episode_2 / self.config['tensorboard_frequency']}, 
+                                    episode)
+                    r_episode_1 = 0
+                    r_episode_2 = 0
+
+                    # model save
+                    if self.config['mode'] == 'train':
+                        self.agent1.save(1)
+                        self.agent2.save(2)
+                        self.critic.save()
+
+            if self.render:
+                self.env.render()
+            
+            reward = self.rollout()
+
+            # reward summation
+            r_episode_1 += reward[0]
+            r_episode_2 += reward[2]
+
+            if self.config['mode']=='train' and self.critic.memory.n >= self.config['learn_threshold']:
+                if step % self.config['target_frequency'] == 0 :
+                    self.critic.target_update()
+                if step % self.config['learn_frequency'] == 0:
+                    loss = self.critic.learn()
+                    self.logger.add_scalar('loss', loss.detach().item(), step)
+                
+                # epsilon greedy decaying
+                self.agent1.e_decay()
+                self.agent2.e_decay()
+                
+        self.env.close()

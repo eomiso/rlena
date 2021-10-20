@@ -231,3 +231,198 @@ class TwoVsTwoPomme(CustomEnvWrapper):
             return rgb_array
         else:
             return Pomme.render(self, *args, **kwargs)
+
+
+
+class OnehotEnvWrapper(Pomme):
+    """
+    One-hot coded feature env
+    """
+    def __init__(self, config, agent_list) -> None:
+        super().__init__(**config['env_kwargs'])
+        self.seed(0)
+        self.config = config
+        agents, self.isCustum = [], []
+
+        for id_, (custom,agent) in enumerate(agent_list):
+            # NOTE: This is IMPORTANT so that the agent character is initialized
+            self.isCustum.append(custom)
+            agent.init_agent(id_, self.config['game_type'])
+            agents.append(agent)
+        
+        self.set_agents(agents)
+        self.set_init_game_state(None)
+
+        obs_shape = (18, self._board_size, self._board_size)
+        self.observation_space = spaces.Box(low = 0, high = np.inf, shape = obs_shape)
+
+        self.global_state = None
+        self._pos_queue = [[] for _ in range(len(agent_list))]
+
+    def reset(self):
+        self.global_state = super().reset()
+        obs = self._preprocessing(self.global_state)
+        self._pos_queue = [[] for _ in range(len(self.isCustum))]
+
+        return obs
+
+    def step(self, acs):
+        state, reward, done, info = super().step(acs)
+        reward = self._custum_get_rewards(state, self.global_state)
+        obs = self._preprocessing(state)   
+        self.global_state = state
+        self._pos_queue_add()
+
+        return obs, reward, done, info
+
+    def _pos_queue_add(self,):
+        """Reward에 사용하기 위해 history position 기록"""
+        for i, state in enumerate(self.global_state):
+            self._pos_queue[i].append(state['position'])
+            while len(self._pos_queue[i]) > self._board_size * self._board_size:
+                self._pos_queue[i].pop(0)
+
+    def _custum_get_rewards(self, new_states, old_states):
+        original_rewards = super()._get_rewards()
+        rewards = []
+        for i, original_reward in enumerate(original_rewards):
+            rewards.append(self._get_reward_helper(new_states[i], 
+                                                   old_states[i], 
+                                                   self._pos_queue[i], 
+                                                   original_reward,
+                                                   i+10))
+        return rewards
+
+    def _get_reward_helper(self, new_state, old_state, pos_queue, original_reward, agent_id):
+        reward = 0
+
+        # 1. get kick --> 0.02 pts
+        reward += (new_state['can_kick'] - old_state['can_kick']) * 0.02 
+        # 2. get ammo --> 0.01 pts
+        reward += (new_state['ammo'] - old_state['ammo']) * 0.01
+        # 3. get blast length --> 0.01 pts
+        reward += (new_state['blast_strength'] - old_state['blast_strength']) * 0.01
+        # 4. Exploration --> 0.001
+        reward += 0.001 if not new_state['position'] in pos_queue else 0
+        # 5. dead agent in winning team gets 0.5
+        if original_reward == 1:
+            reward += 1 if agent_id in new_state['alive'] else 0.5
+        # 6. draw gives 0
+        if original_reward == -1:
+            reward += 0 if agent_id in new_state['alive'] else -1
+        # alive change
+        teammate = new_state.get('teammate').value # change enum to dict
+        enemies = [enemy.value for enemy in new_state['enemies']] # change enum to dict
+        try: 
+            enemies.remove(9)  # Remove dummy agent from enemies list
+        except:
+            pass
+        for agent_id in old_state['alive']:
+            if not agent_id in new_state['alive']:
+                # 7. teammate death -0.5
+                if agent_id == teammate:
+                    reward += -0.5
+                # 8. enemy death  0.5
+                elif agent_id in enemies:
+                    reward += 0.5
+    
+        return reward
+
+    def get_global_obs(self):
+        obs = []
+        for i, state in enumerate(self.global_state):
+            state = self._preprocessing_helper(state, agent_id=i+10)
+            obs.append(state[:8]) # only personal obs
+        obs.append(state[8:]) # common obs
+        
+        return np.concatenate(obs,axis=0) # shape[0] == 42
+
+    def _preprocessing(self, states: List[Dict], **kwargs) -> List[Dict]:
+        obs = []
+        for i, state in enumerate(states):
+            if self.isCustum[i]:
+                obs.append(self._preprocessing_helper(state, agent_id=i+10))
+            else:
+                obs.append(state)
+        return obs
+
+    def _preprocessing_helper(self, state: Dict, agent_id, **kwargs) -> Dict:
+        d = state.copy()
+        obs = []
+        map_shape = (self._board_size, self._board_size)
+
+        # 1~7 : observation of each agent
+        # 1. ego location
+        alive = agent_id in d['alive']
+        loc = np.zeros(shape=map_shape)
+        pos = d['position']
+        loc[pos[0], pos[1]] = 1 if alive else 0
+        obs.append(loc)
+        # 2. number of ammo
+        ammo = np.ones(map_shape) * d['ammo']
+        obs.append(ammo)
+        # 3. blast strength
+        blast_strength = np.ones(map_shape) * d['blast_strength']
+        obs.append(blast_strength)
+        # 4. can kick or not
+        kick = np.ones(map_shape) if d['can_kick'] else np.zeros(map_shape)
+        obs.append(kick)
+        # 5. teamate or not
+        d.update({'teammate': d.get('teammate').value}) # change enum to dict
+        single = 9 == d['teammate'] # if it has 9, its single game
+        issingle = np.zeros(map_shape) if single else np.ones(map_shape)
+        obs.append(issingle)
+        # 6. teammate location
+        team_loc = np.zeros(map_shape)
+        if not single:
+            team_id = d['teammate']-10
+            team_pos = self.global_state[team_id]['position']
+            team_loc[team_pos[0],team_pos[1]] = 1 if team_id in d['alive'] else 0
+        obs.append(team_loc)
+        # 7. enemy location
+        enemies = [enemy.value-10 for enemy in d['enemies']] # change enum to dict
+        try: 
+            enemies.remove(-1)  # Remove dummy agent from enemies list
+        except:
+            pass
+        enemy_loc = np.zeros(map_shape)
+        for enemy_id in enemies:
+            enemy_pos = self.global_state[enemy_id]['position']
+            enemy_loc[enemy_pos[0],enemy_pos[1]] = 1 if enemy_id in d['alive'] else 0
+        obs.append(enemy_loc)
+
+        # 8~18 : Common observation
+        # 8. blast strength
+        obs.append(d['bomb_blast_strength']) 
+        # 9. bomb life
+        obs.append(d['bomb_life'])
+        # 10. passage
+        board = d['board']
+        passage = (board == 0).astype(int)
+        obs.append(passage)
+        # 11. rigid wall
+        rigid_wall = (board == 1).astype(int)
+        obs.append(rigid_wall)
+        # 12. wodden walls
+        wooden_wall = (board == 2).astype(int)
+        obs.append(wooden_wall)
+        # 13. bomb
+        bomb = (board == 3).astype(int)
+        obs.append(bomb)
+        # 14. flames
+        flames = (board == 4).astype(int)
+        obs.append(flames)
+        # 15. extra bomb power up
+        extra_bomb_power_up = (board == 6).astype(int)
+        obs.append(extra_bomb_power_up)
+        # 16. blast strngth power up
+        blast_strength_power_up = (board == 7).astype(int)
+        obs.append(blast_strength_power_up)
+        # 17. kicking ability power up
+        kick_power_up = (board == 8).astype(int)
+        obs.append(kick_power_up)
+        # 18. total time step
+        time_step = np.ones(map_shape) * (self._step_count / self._max_steps)
+        obs.append(time_step)
+
+        return np.stack(obs, axis=0)

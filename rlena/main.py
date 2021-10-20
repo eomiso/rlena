@@ -60,6 +60,10 @@ def main():
     coma.add_argument('--remove_stop', action='store_true')
     coma.add_argument('--onehot', action='store_true')
 
+    qmix = parser.add_argument_group("hyperparams for qmix")
+    qmix.add_argument('--config', type=str, default="./config/qmix/QMIX.yaml", help="config file of qmix")
+    qmix.add_argument('--pretrained', action='store_true', help="using pretrained model")
+
     model = parser.add_argument_group("Model options")
     model.add_argument("--model", type=str, default=None)
     model.add_argument("--checkpoint", type=str, default=None)

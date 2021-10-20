@@ -17,6 +17,36 @@ import traceback
 import torch
 import numpy as np
 
+def featurize(env, states):
+    """
+    basic featurization of pommerman
+    """
+    feature = []
+    for state in states:
+        feat = env.featurize(state)/13
+        feature.append(feat.tolist())
+    return feature
+
+def flatten(obses):
+    """
+    flatten feature of pommerman
+    """
+    result = []
+    if isinstance(obses, list):
+        for obs in obses:
+            location, additional = obs['locational'], obs['additional']
+            f_loc = np.array(location[0]).flatten() / 13 # normalize
+            f_add = np.array(additional).flatten() / 13 # normalize
+
+            result.append(np.hstack([f_loc, f_add]))
+        return result
+
+    else:
+        location, additional = obses['locational'], obses['additional']
+        f_loc = np.array(location[0]).flatten() / 13 # normalize
+        f_add = np.array(additional).flatten() / 13 # normalize
+
+        return np.hstack([f_loc, f_add])
 
 def mask_action(actions, idx=0, v=-1.0):
     # For COMA; masking actions for the centralized critic
