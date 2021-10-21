@@ -18,7 +18,6 @@ from rl2.buffers.base import ReplayBuffer
 from rlena.algos.buffers import EpisodicBuffer
 from rlena.algos.utils import mask_action
 
-
 """
 Implementation of Counterfactual Multi-Agent(COMA) Policy Gradients
 from Foerster et al. (https://arxiv.org/pdf/1705.08926.pdf)
