@@ -3,4 +3,5 @@ __pycache__/
 runs/
 logs/
 records/
-rlena/logs/
+rlena/log/
+rlena/save/
