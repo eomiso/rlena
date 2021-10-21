@@ -44,3 +44,6 @@ playground: Pommerman
 
 ## demo
 Need more ideation
+
+## Execute command
+> QMIX : python main.py --algo=QMIX --config_dir=config/qmix/QMIX.yaml
