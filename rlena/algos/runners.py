@@ -99,6 +99,7 @@ def qmix(args):
     import torch
     from torch.utils.tensorboard import SummaryWriter
     
+    from rlena.algos.utils import Logger
     from rlena.algos.workers import QmixWorker
     from rlena.algos.agents.qmix import QMIXAgent, QMIXCritic
     from rlena.algos.agents.baselines import StopedAgent, NoBombSimpleAgent
@@ -107,10 +108,10 @@ def qmix(args):
     if args.env == 'pommerman':
         from rlena.envs.playground.pommerman.configs import team_v0_fast_env
         from rlena.envs.playground.pommerman import agents
-        from rlena.envs.customPomme import OnehotEnvWrapper
+        from rlena.envs.customPomme import SkynetEnvWrapper
         
         # config file open
-        with open(args.config) as f:
+        with open(args.config_dir) as f:
             total_config = yaml.load(f, Loader=yaml.FullLoader)
             env_kwargs = total_config.pop('env_kwargs')
             agent_config = total_config.pop('agent_config')
@@ -135,10 +136,8 @@ def qmix(args):
         agent_config['device'] = device
         QMIX_config['device'] = device
 
-        # tensorboard
-        date = datetime.now()
-        tensorboard_name = train_config['tensorboard_name']
-        summary = SummaryWriter(os.path.join("./log", tensorboard_name, date.strftime("%Y%b%d_%H_%M_%S")))
+        # logger
+        logger = Logger(name=args.algo, args=args)
 
         # making agents and critic
         agent1 = QMIXAgent(agent_config)
@@ -156,7 +155,7 @@ def qmix(args):
                     (False,enemy_dict[train_config['enemy']]()),
                     (True,agent2),
                     (False,enemy_dict[train_config['enemy']]())]
-        env = OnehotEnvWrapper(env_config, agent_list=agent_list)
+        env = SkynetEnvWrapper(env_config, agent_list=agent_list)
 
         if args.pretrained:
             print("pretrained agent and critic are used")
@@ -169,7 +168,7 @@ def qmix(args):
             agent=[agent1, agent2],
             critic=critic,
             config=train_config,
-            logger=summary
+            logger=logger
         )
 
         worker.run()
