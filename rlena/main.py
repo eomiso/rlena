@@ -33,7 +33,7 @@ def main():
     dirs.add_argument("--ckpt_dir", type=str, default='logs/ckpt')
     dirs.add_argument("--load_dir", type=str)
 
-    algo = ['PPO', 'QMIX', 'COMA']
+    algo = ['PPO', 'SAC','QMIX', 'COMA']
     train = parser.add_argument_group("training options")
     train.add_argument("--algo", type=str, required=True,
                        choices=algo)
