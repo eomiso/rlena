@@ -12,7 +12,6 @@ from . import network
 gym.logger.set_level(40)
 REGISTRY = None
 
-
 def _register():
     global REGISTRY
     REGISTRY = []

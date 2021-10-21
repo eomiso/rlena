@@ -32,6 +32,7 @@ def main():
     dirs.add_argument("--log_dir", type=str, default='logs')
     dirs.add_argument("--ckpt_dir", type=str, default='logs/ckpt')
     dirs.add_argument("--load_dir", type=str)
+    dirs.add_argument("--config_dir", type=str, help='configuration files : yaml, json, etc')
 
     algo = ['PPO', 'QMIX', 'COMA']
     train = parser.add_argument_group("training options")
@@ -40,14 +41,20 @@ def main():
     train.add_argument("--total_step", type=int, default=100)
     train.add_argument("--n_env", type=int, default=1)
     train.add_argument("--gpu_id", type=int, default=None)
+    train.add_argument('--max_episode', type=int, default=20000)
+    train.add_argument('--max_timestep', type=int, default=10000000)
+
+    # env hyperparameter
+    env = parser.add_argument_group("hyperparams for env")
+    env.add_argument('--random_num_wall', type=bool, default=True)
+    env.add_argument('--board_size', type=int, default=11)
+    env.add_argument('--max_items', type=int, default=20)
+    env.add_argument('--max_steps', type=int, default=800)
+    env.add_argument('--max_rigid', type=int, default=1)
+    env.add_argument('--max_wood', type=int, default=1)
 
     # Hyperparams for specific algorithm
     coma = parser.add_argument_group("hyperparams for coma")
-    coma.add_argument('--random_num_wall', type=bool, default=True)
-    coma.add_argument('--max_steps', type=int, default=800)
-    coma.add_argument('--max_rigid', type=int, default=1)
-    coma.add_argument('--max_wood', type=int, default=1)
-    coma.add_argument('--max_episode', type=int, default=20000)
     coma.add_argument('--update_interval', type=int, default=150)
     coma.add_argument('--eps_start', type=float, default=0.5)
     coma.add_argument('--eps_end', type=float, default=0.02)
@@ -61,7 +68,6 @@ def main():
     coma.add_argument('--onehot', action='store_true')
 
     qmix = parser.add_argument_group("hyperparams for qmix")
-    qmix.add_argument('--config', type=str, default="./config/qmix/QMIX.yaml", help="config file of qmix")
     qmix.add_argument('--pretrained', action='store_true', help="using pretrained model")
 
     model = parser.add_argument_group("Model options")

@@ -179,10 +179,9 @@ class QmixWorker:
                 
                 if episode % self.config['tensorboard_frequency'] == 0:
                     # reward writing
-                    self.logger.add_scalars('Average reward', 
-                                    {"agent1" :r_episode_1 / self.config['tensorboard_frequency'],
-                                        "agent2" :r_episode_2 / self.config['tensorboard_frequency']}, 
-                                    episode)
+                    self.logger.scalar_summary({"agent1 reward" :r_episode_1 / self.config['tensorboard_frequency'],
+                                        "agent2 reward" :r_episode_2 / self.config['tensorboard_frequency']}, 
+                                    step)
                     r_episode_1 = 0
                     r_episode_2 = 0
 
@@ -208,7 +207,7 @@ class QmixWorker:
                     self.critic.target_update()
                 if step % self.config['learn_frequency'] == 0:
                     loss = self.critic.learn()
-                    self.logger.add_scalar('loss', loss.detach().item(), step)
+                    self.logger.scalar_summary({"critict loss" :loss.detach().item()}, step)
                 
                 # epsilon greedy decaying
                 self.agent1.e_decay()

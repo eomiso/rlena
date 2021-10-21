@@ -2,8 +2,6 @@ import os
 import pickle
 import random
 import numpy as np
-from os import fchdir
-from numpy.lib.arraysetops import isin
 
 import torch
 import torch.nn as nn
@@ -29,7 +27,6 @@ except gym.error.Error as e:
 
 from rlena.algos.buffers import PriorityBuffer
 from rlena.algos.utils import flatten
-
 
 
 ###########################################
@@ -348,7 +345,6 @@ class QMIXCritic:
                 for j in range(Qval_2.shape[1]):
                     q1 = Qval_1[:,i:i+1] # 32
                     q2 = Qval_2[:,j:j+1] # 32
-                    print(batch_global_state.shape)
                     Qtotal_target = self.target_net(torch.cat((q1,q2), dim=1), batch_global_state)
                     if Q_max is None:
                         Q_max = Qtotal_target

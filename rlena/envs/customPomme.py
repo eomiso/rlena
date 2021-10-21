@@ -236,7 +236,7 @@ class TwoVsTwoPomme(CustomEnvWrapper):
 
 
 
-class OnehotEnvWrapper(Pomme):
+class SkynetEnvWrapper(Pomme):
     """
     One-hot coded feature env
     """
