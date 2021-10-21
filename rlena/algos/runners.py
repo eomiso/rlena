@@ -93,12 +93,14 @@ def qmix(args):
     import numpy as np
     from tqdm import trange
     from copy import deepcopy
+    from easydict import EasyDict
     from datetime import datetime
     
     import torch
     from torch.utils.tensorboard import SummaryWriter
     
-    from rlena.algos.agent import QMIXAgent, QMIXCritic
+    from rlena.algos.workers import QmixWorker
+    from rlena.algos.agents.qmix import QMIXAgent, QMIXCritic
     from rlena.algos.agents.baselines import StopedAgent, NoBombSimpleAgent
     args = EasyDict(args.__dict__)
 
@@ -114,6 +116,7 @@ def qmix(args):
             agent_config = total_config.pop('agent_config')
             QMIX_config = total_config.pop('QMIX_config')
             train_config = total_config.pop("train_config")
+        
         train_config['render'] = args.render
         train_config['mode'] = args.mode
         train_config['load_model'] = args.pretrained 

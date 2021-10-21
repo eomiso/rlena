@@ -3,6 +3,7 @@ from typing import Iterable
 from rl2.workers.base import EpisodicWorker
 
 import numpy as np
+from tqdm import trange
 
 
 class ComaWorker(EpisodicWorker):
@@ -117,14 +118,15 @@ class QmixWorker:
                  env,
                  agent,
                  critic,
-                 config):
+                 config,
+                 logger):
         self.done = True
         self.env = env
         self.agent1 = agent[0]
         self.agent2 = agent[1]
         self.critic = critic
 
-        self.config = train_config
+        self.config = config
         self.logger = logger
 
         self.init_config()
@@ -148,7 +150,7 @@ class QmixWorker:
 
         # add data in memory
         if self.config['mode'] == "train":
-            critic.mem_append([state, 
+            self.critic.mem_append([self.state, 
                             gru_hidden, 
                             global_state, 
                             actions, 
@@ -185,7 +187,7 @@ class QmixWorker:
                         self.agent2.save(2)
                         self.critic.save()
 
-            if self.render:
+            if self.config['render']:
                 self.env.render()
             
             reward = self.rollout()

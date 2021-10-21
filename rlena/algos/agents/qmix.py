@@ -9,8 +9,23 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from envs.playground.pommerman import characters
-from envs.playground.pommerman.agents import BaseAgent, SimpleAgent
+import gym
+
+# re-register issues
+try:
+    from rlena.envs.playground.pommerman import characters
+    from rlena.envs.playground.pommerman.agents import BaseAgent, SimpleAgent
+
+except gym.error.Error as e:
+    env_dict = gym.envs.registration.registry.env_specs.copy()
+    for env in env_dict:
+        if 'Pomme' in env or 'OneVsOne' in env:
+            print("Remove {} from registry".format(env))
+            del gym.envs.registration.registry.env_specs[env]
+    
+    from rlena.envs.playground.pommerman import characters
+    from rlena.envs.playground.pommerman.agents import BaseAgent, SimpleAgent
+
 from rlena.algos.buffers import PriorityBuffer
 from rlena.algos.utils import flatten
 
@@ -82,7 +97,6 @@ class ConvGRU_model(nn.Module):
         Q_val = self.fc_Q(h_RNN)
 
         return Q_val, h_RNN
-
 
 
 class QMIXAgent(BaseAgent):
@@ -297,7 +311,7 @@ class QMIXCritic:
         self.target_net.to(self.device)
         self.target_net.requires_grad_ = False
 
-        self.memory = ExperienceMemory(configs['memory_config'])
+        self.memory = PriorityBuffer(configs['memory_config'])
         self.agents = agents
 
         self.gamma = configs['gamma']
@@ -347,7 +361,7 @@ class QMIXCritic:
                             self.agents[1].getQ(batch_state[:,1], batch_action[:,1:2], hidden= batch_hidden[:,1])), dim = 1) # 32X2
         Qtotal = self.online_net(Qval, batch_global_state).squeeze()
 
-        loss = f.mse_loss(target,Qtotal)
+        loss = F.mse_loss(target,Qtotal)
         self.zero_grad()
         loss.backward()
         self.step()

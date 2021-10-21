@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import os
 
-from algos import runners
+from rlena.algos import runners
 
 
 def main():
@@ -20,7 +20,7 @@ def main():
     common.add_argument("--mode", type=str, choices=mode, default='train')
     common.add_argument("--tag", type=str, default='')
     common.add_argument("--seed", type=int, default=-1)
-    common.add_argument('--render', type=bool, default=True)
+    common.add_argument('--render', action='store_true')
     common.add_argument('--render_interval', type=int, default=10)
 
     log = parser.add_argument_group("logging options")

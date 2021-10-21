@@ -1,5 +1,6 @@
 import numpy as np
 import pprint
+import random
 
 from collections import deque
 from rl2.buffers.base import ReplayBuffer
@@ -67,13 +68,13 @@ class EpisodicBuffer(ReplayBuffer):
 class PriorityBuffer:  # stored as ( s, a, r, s_ , done mask) in SumTree
 
     def __init__(self, args):
-        self.capacity = int(args.memory_capacity)
+        self.capacity = int(args['capacity'])
         self.tree = SumTree(self.capacity)
-        self.beta = args.per_beta
-        self.beta_increment_per_sampling = args.per_beta_inc
-        self.e = args.per_epsilon
-        self.a = args.per_alpha
-        self.n_step = args.n_step
+        self.beta = args['per_beta']
+        self.beta_increment_per_sampling = args['per_beta_inc']
+        self.e = args['per_epsilon']
+        self.a = args['per_alpha']
+        self.n_step = args['n_step']
         
 
     def _get_priority(self, error):

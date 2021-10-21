@@ -8,6 +8,8 @@ from pommerman.agents import BaseAgent
 from pommerman.envs.v0 import Pomme
 from pommerman.configs import team_competition_env
 
+from gym import spaces
+
 
 class CustomAgent(BaseAgent):
     def act(self, *args):
@@ -238,6 +240,7 @@ class OnehotEnvWrapper(Pomme):
     """
     One-hot coded feature env
     """
+
     def __init__(self, config, agent_list) -> None:
         super().__init__(**config['env_kwargs'])
         self.seed(0)
