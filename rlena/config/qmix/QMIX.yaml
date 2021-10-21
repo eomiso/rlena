@@ -10,8 +10,8 @@ agent_config:
     input_shape: !!python/tuple [18,11,11]
     # in_channel, out_channel, kernel, stride, padding
     conv_filters: [[18,64,3,1,1], [64,64,3,1,1], [64,64,3,1,1], [64,64,3,1,1], [64,2,1,1,0]] 
-    lstm_cell_size: 256
-    fc_hidden: [512]
+    lstm_cell_size: 128
+    fc_hidden: [128]
     dropout: 0.0
   epsilon: 1.0
   epsilon_decay: 0.9999976974
@@ -24,8 +24,8 @@ agent_config:
 QMIX_config:
   model_config:
     input_shape: !!python/tuple [42,11,11]
-    conv_filters: [[42,64,3,2,0], [64,64,3,2,0], [64,128,2,1,1]] 
-    fc_hidden: 128
+    conv_filters: [[42,64,3,2,0], [64,64,3,2,0], [64,64,2,1,1]] 
+    fc_hidden: 32
   
   memory_config:
     capacity: 2000000
@@ -48,9 +48,9 @@ train_config:
   tensorboard_frequency: 10
   tensorboard_name: QMIX
   max_step: 50000000
-  learn_threshold: 200000
+  learn_threshold: 200
   target_frequency: 800
-  learn_frequency: 32
+  learn_frequency: 256
   enemy: simple
 
 

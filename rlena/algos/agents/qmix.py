@@ -1,3 +1,4 @@
+import os
 import pickle
 import random
 import numpy as np
@@ -191,11 +192,15 @@ class QMIXAgent(BaseAgent):
         """agent 끼리도 다르기 때문에 num으로 구분한다."""
         path = self.save_path.split('.')
         path = path[0]+"_"+str(num)+'.'+path[1]
+        if not os.path.isdir(os.path.dirname(path)):
+            os.makedirs(os.path.dirname(path))
         torch.save(self.online_model.state_dict(), path)
 
     def load(self, num):
         path = self.save_path.split('.')
         path = path[0]+"_"+str(num)+'.'+path[1]
+        if not os.path.isdir(os.path.dirname(path)):
+            assert "There is no trained model parameters. Please train model first"
         self.online_model.load_state_dict(torch.load(path, map_location=self.device))
         self.target_model.load_state_dict(self.online_model.state_dict())
 
@@ -283,11 +288,11 @@ class MixingNet(nn.Module):
             global_state = global_state.unsqeeze(dim=0)
         global_hidden = self.conv_layer(global_state)
         global_hidden = torch.flatten(global_hidden, start_dim=1)
-
+        
         qvals = qvals.view(-1,1,self.agent_num)
-
+        
         x = torch.bmm(qvals, self.w_1(global_hidden))
-        x = f.elu(x + self.b_1(global_hidden))
+        x = F.elu(x + self.b_1(global_hidden))
         x = torch.bmm(x, self.w_2(global_hidden)) # 여기까지 Advantage라고 보면 됨
         x = x + self.b_2(global_hidden) # Dueling의 일종이라고 봐도 될 듯
 
@@ -343,7 +348,7 @@ class QMIXCritic:
                 for j in range(Qval_2.shape[1]):
                     q1 = Qval_1[:,i:i+1] # 32
                     q2 = Qval_2[:,j:j+1] # 32
-
+                    print(batch_global_state.shape)
                     Qtotal_target = self.target_net(torch.cat((q1,q2), dim=1), batch_global_state)
                     if Q_max is None:
                         Q_max = Qtotal_target
@@ -402,7 +407,7 @@ class QMIXCritic:
 
         sample = [state, gru_hidden, global_state,  actions, reward, done, state_prime]
         
-        self.memory.add(sample)
+        self.memory.add(error, sample)
 
     def mem_update(self, idxs, errors):
         for idx, error in zip(idxs, errors):
@@ -417,8 +422,12 @@ class QMIXCritic:
             self.memory = pickle.load(f)
 
     def save(self):
+        if not os.path.isdir(os.path.dirname(self.save_path)):
+            os.makedirs(os.path.dirname(self.save_path))
         torch.save(self.online_net.state_dict(), self.save_path)
 
     def load(self):
+        if not os.path.isdir(os.path.dirname(self.save_path)):
+            assert "There is no trained model parameters. Please train model first"
         self.online_net.load_state_dict(torch.load(self.save_path))
         self.target_net.load_state_dict(self.online_net.state_dict())

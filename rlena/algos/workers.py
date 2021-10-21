@@ -171,6 +171,11 @@ class QmixWorker:
             if self.done:
                 episode += 1
                 self.state= self.env.reset()
+
+                if self.config['mode'] != 'train':
+                    print("{} - episode done".format(episode-1))
+                    if self.config['max_episode'] < episode:
+                        return
                 
                 if episode % self.config['tensorboard_frequency'] == 0:
                     # reward writing
@@ -186,6 +191,8 @@ class QmixWorker:
                         self.agent1.save(1)
                         self.agent2.save(2)
                         self.critic.save()
+                    
+                        
 
             if self.config['render']:
                 self.env.render()
@@ -196,7 +203,7 @@ class QmixWorker:
             r_episode_1 += reward[0]
             r_episode_2 += reward[2]
 
-            if self.config['mode']=='train' and self.critic.memory.n >= self.config['learn_threshold']:
+            if (self.config['mode']=='train') and (self.critic.memory.size() >= self.config['learn_threshold']):
                 if step % self.config['target_frequency'] == 0 :
                     self.critic.target_update()
                 if step % self.config['learn_frequency'] == 0:

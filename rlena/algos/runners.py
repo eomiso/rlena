@@ -122,7 +122,7 @@ def qmix(args):
         train_config['load_model'] = args.pretrained 
         if args.mode != 'train':
             train_config['load_model'] = True
-            train_config['max_step'] = 10
+            train_config['max_episode'] = 10
 
         # GPU setup
         if torch.cuda.is_available():

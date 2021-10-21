@@ -91,36 +91,39 @@ class PriorityBuffer:  # stored as ( s, a, r, s_ , done mask) in SumTree
 
         self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])
         
-        batch_state, batch_action, batch_reward, batch_state_p, batch_global_s, batch_done_mask = [],[],[],[],[], []
-        batch_hidden = []
+        batch_state, batch_gru, batch_global_s, batch_action, batch_reward, batch_done_mask, batch_state_p = [],[],[],[],[],[],[]
         for i in range(n):
             a = segment * i
             b = segment * (i + 1)
 
             s = random.uniform(a, b)
             (idx, p, data) = self.tree.get(s)
-            state, action, reward, state_prime, global_state, done_mask = data
+            state, gru, global_s, action, reward, done_mask, state_p = data
             priorities.append(p)
-            batch_state.append(state[0])
-            batch_hidden.append(state[1])
+            batch_state.append(state)
+            batch_gru.append(gru)
+            batch_global_s.append(global_s)
             batch_action.append(action)
             batch_reward.append(reward)
-            batch_state_p.append(state_prime)
-            batch_global_s.append(global_state)
             batch_done_mask.append(done_mask)
+            batch_state_p.append(state_p)
             idxs.append(idx)
-        batch = [batch_state, batch_hidden, batch_action, batch_reward, batch_state_p, batch_global_s, batch_done_mask]
+        batch = [batch_state, batch_gru, batch_global_s, batch_action, batch_reward, batch_done_mask, batch_state_p]
+        batch = list(map(np.stack, batch))
+        
         sampling_probabilities = priorities / self.tree.total()
         is_weight = np.power(self.tree.n_entries * sampling_probabilities, -self.beta)
         is_weight /= is_weight.max()
 
-        return batch, idxs, is_weight
+        return batch
 
     def update(self, idxs, errors):
         for idx, error in zip(idxs, errors):
             p = self._get_priority(error)
             self.tree.update(idx, p)
 
+    def size(self):
+        return self.tree.n_entries
 
 
 class SumTree:
