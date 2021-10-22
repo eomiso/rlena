@@ -41,6 +41,10 @@ def main():
     train.add_argument("--n_env", type=int, default=1)
     train.add_argument("--gpu_id", type=int, default=None)
 
+    # Common Hyperparams for all algorithm
+    hparams = parser.add_agument_group('common hyperparams for all algorithms')
+    hparams.add_argument('--max_steps', type=int, default=800)
+
     # Hyperparams for specific algorithm
     coma = parser.add_argument_group("hyperparams for coma")
     coma.add_argument('--random_num_wall', type=bool, default=True)
@@ -64,11 +68,12 @@ def main():
     sacd.add_argument('--cuda_device', type=int, default=0)
     sacd.add_argument('--train_interval', type=int, default=1)
     sacd.add_argument('--update_interval', type=int, default=5)
-    sacd.add_argument('--max_step', type=int, default=1000)
+    # sacd.add_argument('--max_step', type=int, default=1000)
     # sacd.add_argument('--dir_name', type=str, default=None)
     sacd.add_argument('--empty_map', type=bool, default=False)
     sacd.add_argument('--rand_until', type=int, default=1028)
     sacd.add_argument('--eps', type=float, default=0.5)
+    sacd.add_argument('--n_agents', type=int, default=2)
 
     model = parser.add_argument_group("Model options")
     model.add_argument("--model", type=str, default=None)
