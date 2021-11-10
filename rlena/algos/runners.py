@@ -95,6 +95,7 @@ def sacd(args):  # args: argparse.ArgumentParser
     import json
     from rlena.algos.agents.sac_discrete import SACAgentDISC, SACModelDISC
     from rlena.algos.workers import SACDworker
+    from rl2.buffers.base import ReplayBuffer
     from rlena.algos.utils import Logger
     # TODO: Intergrate with my config easydict in sacd
     args = EasyDict(args.__dict__)
@@ -106,6 +107,21 @@ def sacd(args):  # args: argparse.ArgumentParser
         import pommerman.envs as envs
         from pommerman.agents import SimpleAgent
         from pommerman.characters import Bomber
+        from rlena.algos.utils import Logger
+
+        env_config = one_vs_one_env()
+        if args.empty_map:
+            # TODO: use eunki's argparser options instead
+            env_config['env_kwargs']['num_rigid'] = 0
+            env_config['env_kwargs']['num_wood'] = 0
+            env_config['env_kwargs']['num_items'] = 0
+
+        env_config['env_kwargs']['agent_view_size'] = 4
+        env_config['env_kwargs']['max_step'] = args.max_steps
+        env = ConservativeEnvWrapper(env_config)
+        action_shape = env.action_space.n if hasattr(env.action_space,
+                                                     'n') else env.action_space.shape
+        observation_shape, additional_shape = env.observation_shape
 
         config = EasyDict({
             'gamma': 0.99,
@@ -123,26 +139,14 @@ def sacd(args):  # args: argparse.ArgumentParser
             'render': True,
             'render_interval': 10,
             'log_interval': 10, 
-            'eps': args.eps,  # for decaying epsilon greedy
+            'eps': args.eps_start,  # for decaying epsilon greedy
             'log_dir': args.log_dir,
             'save_dir': args.ckpt_dir,
             'lr_ac': 1e-4,
             'lr_cr': 1e-4,
         })
 
-        env_config = one_vs_one_env()
-        if args.empty_map:
-            # TODO: use eunki's argparser options instead
-            env_config['env_kwargs']['num_rigid'] = 0
-            env_config['env_kwargs']['num_wood'] = 0
-            env_config['env_kwargs']['num_items'] = 0
-
-        env_config['env_kwargs']['agent_view_size'] = 4
-        env_config['env_kwargs']['max_step'] = args.max_steps
-        env = ConservativeEnvWrapper(env_config)
-        action_shape = env.action_space.n if hasattr(env.action_space,
-                                                     'n') else env.action_space.shape
-        observation_shape, additional_shape = env.observation_shape
+        logger = Logger(name=args.algo, args=config)
 
         def obs_handler(obs, keys=['locational', 'additional']):
             if isinstance(obs, dict):
@@ -156,6 +160,17 @@ def sacd(args):  # args: argparse.ArgumentParser
                 loc = np.stack(loc, axis=0)
                 add = np.stack(add, axis=0)
             return loc, add
+        
+        buffer_kwargs = {
+            'size': 1e6,
+            'elements': {
+                'obs': ((5, 9, 9), (8, ), np.float32),
+                'action': ((6, ), np.float32),
+                'reward': ((1, ), np.float32),
+                'done': ((1, ), np.float32),
+                'obs_': ((5, 9, 9), (8, ), np.float32)
+            }
+        }
 
         model = SACModelDISC(observation_shape,
                              (action_shape,),
@@ -186,7 +201,7 @@ def sacd(args):  # args: argparse.ArgumentParser
             1: SimpleAgent(env_config['agent'](1, env_config["game_type"]))
         }
 
-        env.set_agents(list(agents.values))
+        env.set_agents(list(agents.values()))
         env.set_training_agents(0)
         env.seed(args.seed)
 
