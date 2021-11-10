@@ -65,9 +65,9 @@ def main():
     coma.add_argument('--remove_stop', action='store_true')
     coma.add_argument('--onehot', action='store_true')
 
-    sacd = parser.add_argument_group("hyperparams for sac discrete")
+    sacd=parser.add_argument_group("hyperparams for sac discrete")
     sacd.add_argument('--cuda_device', type=int, default=0)
-    sacd.add_argument('--train_interval', type=int, default=1)
+    sacd.add_argument('--train_interval', type=int, default= 5) # this overlaps the default settings of comaAgent look at coma.py
     # sacd.add_argument('--update_interval', type=int, default=5)
     # sacd.add_argument('--max_step', type=int, default=1000)
     # sacd.add_argument('--dir_name', type=str, default=None)
