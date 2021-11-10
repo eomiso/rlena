@@ -102,7 +102,7 @@ def qmix(args):
     from rlena.algos.utils import Logger
     from rlena.algos.workers import QmixWorker
     from rlena.algos.agents.qmix import QMIXAgent, QMIXCritic
-    from rlena.algos.agents.baselines import StopedAgent, NoBombSimpleAgent
+    from rlena.algos.agents.baselines import StoppedAgent, NoBombSimpleAgent
     args = EasyDict(args.__dict__)
 
     if args.env == 'pommerman':
@@ -149,7 +149,7 @@ def qmix(args):
         env_config['env_kwargs'].update(env_kwargs)
         # Indicate whether training or not
         enemy_dict = {"simple" : agents.SimpleAgent,
-                    "stoped" : StopedAgent,
+                    "stoped" : StoppedAgent,
                     "nobomb" : NoBombSimpleAgent}
         agent_list = [(True,agent1),
                     (False,enemy_dict[train_config['enemy']]()),
