@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 import random
 
-from utils.model import IBMWithNormalization
+from rlena.algos.utils import IBMWithNormalization
 
 import torch as T
 import torch.nn as nn
