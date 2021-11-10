@@ -45,6 +45,7 @@ def main():
     hparams = parser.add_argument_group('common hyperparams for all algorithms')
     hparams.add_argument('--max_steps', type=int, default=800)
     hparams.add_argument('--update_interval', type=int, default=150)
+    hparams.add_argument('--eps_start', type=float, default=0.5)
 
     # Hyperparams for specific algorithm
     coma = parser.add_argument_group("hyperparams for coma")
@@ -54,7 +55,6 @@ def main():
     coma.add_argument('--max_wood', type=int, default=1)
     coma.add_argument('--max_episode', type=int, default=20000)
     # coma.add_argument('--update_interval', type=int, default=150)
-    coma.add_argument('--eps_start', type=float, default=0.5)
     coma.add_argument('--eps_end', type=float, default=0.02)
     coma.add_argument('--decay_step', type=int, default=750)
     coma.add_argument('--polyak', type=float, default=0.95)
@@ -73,8 +73,7 @@ def main():
     # sacd.add_argument('--dir_name', type=str, default=None)
     sacd.add_argument('--empty_map', type=bool, default=False)
     sacd.add_argument('--rand_until', type=int, default=1028)
-    sacd.add_argument('--eps', type=float, default=0.5)
-    sacd.add_argument('--n_agents', type=int, default=2)
+    sacd.add_argument('--args_n_agents', type=int, default=2)
 
     model = parser.add_argument_group("Model options")
     model.add_argument("--model", type=str, default=None)
