@@ -34,7 +34,7 @@ def main():
     dirs.add_argument("--load_dir", type=str)
     dirs.add_argument("--config_dir", type=str, help='configuration files : yaml, json, etc')
 
-    algo = ['PPO', 'QMIX', 'COMA']
+    algo = ['PPO', 'SACD', 'QMIX', 'COMA']
     train = parser.add_argument_group("training options")
     train.add_argument("--algo", type=str, required=True,
                        choices=algo)
@@ -53,10 +53,15 @@ def main():
     env.add_argument('--max_rigid', type=int, default=1)
     env.add_argument('--max_wood', type=int, default=1)
 
+    # Common Hyperparams for all algorithm
+    hparams = parser.add_argument_group('common hyperparams for all algorithms')
+    hparams.add_argument('--update_interval', type=int, default=150)
+    hparams.add_argument('--eps_start', type=float, default=0.5)
+
     # Hyperparams for specific algorithm
     coma = parser.add_argument_group("hyperparams for coma")
-    coma.add_argument('--update_interval', type=int, default=150)
-    coma.add_argument('--eps_start', type=float, default=0.5)
+    # coma.add_argument('--max_steps', type=int, default=800)
+    # coma.add_argument('--update_interval', type=int, default=150)
     coma.add_argument('--eps_end', type=float, default=0.02)
     coma.add_argument('--decay_step', type=int, default=750)
     coma.add_argument('--polyak', type=float, default=0.95)
@@ -69,6 +74,16 @@ def main():
 
     qmix = parser.add_argument_group("hyperparams for qmix")
     qmix.add_argument('--pretrained', action='store_true', help="using pretrained model")
+
+    sacd = parser.add_argument_group("hyperparams for sac discrete")
+    sacd.add_argument('--cuda_device', type=int, default=0)
+    sacd.add_argument('--train_interval', type=int, default=10)
+    # sacd.add_argument('--update_interval', type=int, default=5)
+    # sacd.add_argument('--max_step', type=int, default=1000)
+    # sacd.add_argument('--dir_name', type=str, default=None)
+    sacd.add_argument('--empty_map', type=bool, default=False)
+    sacd.add_argument('--rand_until', type=int, default=1028)
+    sacd.add_argument('--args_n_agents', type=int, default=2)
 
     model = parser.add_argument_group("Model options")
     model.add_argument("--model", type=str, default=None)
