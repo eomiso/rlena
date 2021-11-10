@@ -33,7 +33,7 @@ def main():
     dirs.add_argument("--ckpt_dir", type=str, default='logs/ckpt')
     dirs.add_argument("--load_dir", type=str)
 
-    algo = ['PPO', 'SAC', 'QMIX', 'COMA']
+    algo = ['PPO', 'SACD', 'QMIX', 'COMA']
     train = parser.add_argument_group("training options")
     train.add_argument("--algo", type=str, required=True,
                        choices=algo)
@@ -42,17 +42,18 @@ def main():
     train.add_argument("--gpu_id", type=int, default=None)
 
     # Common Hyperparams for all algorithm
-    hparams = parser.add_agument_group('common hyperparams for all algorithms')
+    hparams = parser.add_argument_group('common hyperparams for all algorithms')
     hparams.add_argument('--max_steps', type=int, default=800)
+    hparams.add_argument('--update_interval', type=int, default=150)
 
     # Hyperparams for specific algorithm
     coma = parser.add_argument_group("hyperparams for coma")
     coma.add_argument('--random_num_wall', type=bool, default=True)
-    coma.add_argument('--max_steps', type=int, default=800)
+    # coma.add_argument('--max_steps', type=int, default=800)
     coma.add_argument('--max_rigid', type=int, default=1)
     coma.add_argument('--max_wood', type=int, default=1)
     coma.add_argument('--max_episode', type=int, default=20000)
-    coma.add_argument('--update_interval', type=int, default=150)
+    # coma.add_argument('--update_interval', type=int, default=150)
     coma.add_argument('--eps_start', type=float, default=0.5)
     coma.add_argument('--eps_end', type=float, default=0.02)
     coma.add_argument('--decay_step', type=int, default=750)
@@ -67,7 +68,7 @@ def main():
     sacd = parser.add_argument_group("hyperparams for sac discrete")
     sacd.add_argument('--cuda_device', type=int, default=0)
     sacd.add_argument('--train_interval', type=int, default=1)
-    sacd.add_argument('--update_interval', type=int, default=5)
+    # sacd.add_argument('--update_interval', type=int, default=5)
     # sacd.add_argument('--max_step', type=int, default=1000)
     # sacd.add_argument('--dir_name', type=str, default=None)
     sacd.add_argument('--empty_map', type=bool, default=False)

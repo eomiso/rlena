@@ -118,7 +118,7 @@ def sacd(args):  # args: argparse.ArgumentParser
             'rand_until': args.rand_until,
             'save_interval': 1000,
             'batch_size': 32,
-            'max_step': args.max_step,
+            'max_step': args.max_steps,
             'device': args.device,
             'render': True,
             'render_interval': 10,
