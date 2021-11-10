@@ -55,7 +55,7 @@ if __name__ == "__main__":
     argparser.add_argument('--cuda_device', type=int, default=0)
     argparser.add_argument('--train_interval', type=int, default=1)
     argparser.add_argument('--update_interval', type=int, default=5)
-    argparser.add_argument('--max_step', type=int, default=1000)
+    argparser.add_argument('--max_steps', type=int, default=1000)
     argparser.add_argument('--dir_name', type=str, default=None)
     argparser.add_argument('--empty_map', type=bool, default=False)
     argparser.add_argument('--rand_until', type=int, default=1028)
@@ -81,7 +81,7 @@ if __name__ == "__main__":
         'rand_until': args.rand_until,
         'save_interval': 1000,
         'batch_size': 32,
-        'max_step': args.max_steps,
+        'max_steps': args.max_steps,
         'device': args.device,
         'render': True,
         'render_interval': 10,
@@ -107,7 +107,7 @@ if __name__ == "__main__":
         env_config['env_kwargs']['num_wood'] = 0
         env_config['env_kwargs']['num_items'] = 0
     env_config['env_kwargs']['agent_view_size'] = 4
-    env_config['env_kwargs']['max_step'] = args.max_step
+    env_config['env_kwargs']['max_step'] = args.max_steps
     env = ConservativeEnvWrapper(env_config)
 
     action_shape = env.action_space.n if hasattr(env.action_space,
