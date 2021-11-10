@@ -207,7 +207,7 @@ def sacd(args):  # args: argparse.ArgumentParser
 
         worker = SACDworker(env,
                             agents=[trainee_agent],
-                            n_agents=args.n_agents,
+                            n_agents=args.args_n_agents,
                             n_env=config.n_env,
                             max_episodes=3e4,
                             training=True,
