@@ -277,10 +277,10 @@ class SACDworker(EpisodicWorker):
             self.ep_steps += steps.astype(np.int)
 
         if self.done:
-            if rewards[0] ==1:
-                print('win')
-            else:
-                print('loose')
+            # if rewards[0] ==1:
+            #    print('win')
+            # else:
+            #    print('loose')
             self.num_episodes += 1
             obs = self.env.reset()
             self.scores.append(self.episode_score)
