@@ -44,7 +44,7 @@ QMIX_config:
   device: cpu
   
 train_config:
-  gpu: 3
+  gpu: 0
   tensorboard_frequency: 10
   tensorboard_name: QMIX_WITH_STOPED
   max_step: 50000000
